@@ -19,6 +19,7 @@ test = [
   "pytest-qt>=4.4,<5",
 ]
 gui = ["PySide6>=6.8,<7"]
+exe = ["PyInstaller>=6.11,<7"]
 
 [project.scripts]
 cfggen = "config_codegen.cli:main"

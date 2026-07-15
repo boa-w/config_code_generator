@@ -1,0 +1,98 @@
+name: Nightly Windows Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: nightly-release
+  cancel-in-progress: true
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+    env:
+      QT_QPA_PLATFORM: offscreen
+      PYTHONUTF8: "1"
+
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Install dependencies
+        shell: pwsh
+        run: python -m pip install ".[test,gui,exe]"
+
+      - name: Run tests
+        shell: pwsh
+        run: python -m pytest
+
+      - name: Build portable EXE
+        shell: pwsh
+        run: python packaging/build_exe.py
+
+      - name: Smoke test packaged application
+        shell: pwsh
+        run: |
+          $process = Start-Process `
+            -FilePath "dist/config-code-generator/config-code-generator.exe" `
+            -ArgumentList "--smoke-test" `
+            -Wait `
+            -PassThru
+          if ($process.ExitCode -ne 0) {
+            throw "Packaged application smoke test failed with exit code $($process.ExitCode)"
+          }
+
+      - name: Upload workflow artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: config-code-generator-nightly-windows-x64
+          path: artifacts/config-code-generator-nightly-windows-x64.zip
+          if-no-files-found: error
+
+      - name: Update nightly release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag --force nightly $env:GITHUB_SHA
+          git push origin refs/tags/nightly --force
+
+          $shortSha = $env:GITHUB_SHA.Substring(0, 7)
+          $timestamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-dd HH:mm:ss 'UTC'")
+          $notes = @"
+          Automated Windows x64 nightly build.
+
+          Commit: $($env:GITHUB_SHA)
+          Built: $timestamp
+          "@
+
+          gh release view nightly *> $null
+          if ($LASTEXITCODE -eq 0) {
+            gh release edit nightly --title "Nightly ($shortSha)" --notes $notes --prerelease
+            if ($LASTEXITCODE -ne 0) { throw "Failed to update nightly release" }
+            gh release upload nightly artifacts/config-code-generator-nightly-windows-x64.zip --clobber
+            if ($LASTEXITCODE -ne 0) { throw "Failed to replace nightly asset" }
+          }
+          else {
+            gh release create nightly artifacts/config-code-generator-nightly-windows-x64.zip `
+              --title "Nightly ($shortSha)" `
+              --notes $notes `
+              --prerelease `
+              --verify-tag
+            if ($LASTEXITCODE -ne 0) { throw "Failed to create nightly release" }
+          }

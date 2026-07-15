@@ -12,6 +12,7 @@ __pycache__/
 .eggs/
 build/
 dist/
+/artifacts/
 pip-wheel-metadata/
 
 # Test, coverage, type-checker, and linter caches

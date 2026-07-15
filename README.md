@@ -25,6 +25,21 @@ pytest
 cfggen-gui config/protocol.example.yaml
 ```
 
+## Windows executable
+
+```powershell
+python -m pip install -e ".[gui,exe]"
+python packaging/build_exe.py
+```
+
+The portable application is written to `dist/config-code-generator/`. The ZIP
+release asset is written to
+`artifacts/config-code-generator-nightly-windows-x64.zip`. Keep the external
+`config/protocol.example.yaml` beside the EXE directory so it remains editable.
+
+Every push to `main` runs tests, builds the Windows x64 portable package, smoke
+tests the packaged EXE, and replaces the asset in the `nightly` prerelease.
+
 The desktop editor provides Index navigation, entry enable/disable controls,
 protocol metadata editing, read/write operation switches, undo/redo, validation,
 generated fragment preview, and a diff against the current generated file.
