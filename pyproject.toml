@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "config-code-generator"
+version = "0.1.0"
+description = "Generate C switch-case protocol handlers from YAML"
+requires-python = ">=3.11"
+dependencies = [
+  "Jinja2>=3.1.6,<4",
+  "PyYAML>=6.0.2,<7",
+  "ruamel.yaml>=0.18.10,<0.19",
+]
+
+[project.optional-dependencies]
+test = [
+  "pytest>=8.3,<10",
+  "pytest-qt>=4.4,<5",
+]
+gui = ["PySide6>=6.8,<7"]
+
+[project.scripts]
+cfggen = "config_codegen.cli:main"
+cfggen-gui = "config_codegen.gui.app:main"
+
+[tool.setuptools.package-dir]
+"" = "src"
+
+[tool.setuptools.package-data]
+config_codegen = ["templates/*.j2"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"

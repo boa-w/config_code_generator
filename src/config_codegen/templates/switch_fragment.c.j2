@@ -1,0 +1,29 @@
+// {{ config.raw.project.generated_notice }}
+{% for command in commands %}
+{{ "if" if loop.first else "else if" }} ({{ config.command_reference }} == 0x{{ "%02X" | format(command.value) }})
+{
+{% for index_case in command.indices %}
+    {{ "if" if loop.first else "else if" }} ({{ config.index_reference }} == 0x{{ "%04X" | format(index_case.value) }})
+    {
+        switch ({{ config.subindex_reference }})
+        {
+{% for entry in index_case.entries %}
+        case {{ entry.value }}: // {{ entry.comment }}
+{% if entry.scoped %}
+        {
+{% endif %}
+{% for line in entry.lines %}
+            {{ line }}
+{% endfor %}
+{% if entry.scoped %}
+        }
+{% endif %}
+            break;
+{% endfor %}
+        default:
+            break;
+        }
+    }
+{% endfor %}
+}
+{% endfor %}

@@ -1,0 +1,199 @@
+# Public demonstration configuration.
+# All identifiers, addresses, values, and protocol entries are fictional.
+
+schema_version: "1.0"
+
+project:
+  name: protocol_fragment_demo
+  generated_notice: "AUTO-GENERATED FILE. DO NOT EDIT."
+
+generator:
+  output:
+    fragment: generated/demo_protocol_switch.inc
+
+protocol:
+  code_references:
+    command: DemoRequest.Command
+    index: DemoRequest.Index
+    subindex: DemoRequest.SubIndex
+    data: DemoRequest.Data
+
+  response:
+    can_id: 0x580
+    transmit_function: Demo_Can_SendResponse
+
+  commands:
+    read:
+      request: 0x40
+      response_by_width: { 1: 0x4F, 2: 0x4B, 4: 0x43 }
+    write_u8:
+      request: 0x2F
+      payload_width: 1
+      success_response: 0x60
+    write_u16:
+      request: 0x2B
+      payload_width: 2
+      success_response: 0x60
+    write_u32:
+      request: 0x23
+      payload_width: 4
+      success_response: 0x60
+
+  errors:
+    response_command: 0x80
+    codes:
+      value_out_of_range: 0x06
+      invalid_key: 0x07
+
+hooks:
+  read_indicator: Demo_Hook_ReadIndicator
+  write_indicator: Demo_Hook_WriteIndicator
+  write_calendar_field: Demo_Hook_WriteCalendarField
+  reset_demo_device: Demo_Hook_ResetDevice
+
+objects:
+  - index: 0x2000
+    name: demo_settings
+    description: "演示设置"
+    enabled: true
+    entries:
+      - subindex: 1
+        name: language
+        description: "语言选项"
+        protocol_ref: "DEMO-SET-01"
+        status: implemented
+        enabled: true
+        kind: scalar
+        access: read_write
+        read: { wire_type: u16, source: g_demoLanguage }
+        write:
+          commands: [write_u16]
+          target: g_demoLanguage
+          validation: { maximum: 2, policy: clamp }
+          storage: { kind: eeprom_u8, function: Demo_Eeprom_WriteByte, address: 0 }
+
+      - subindex: 2
+        name: brightness
+        description: "亮度选项"
+        protocol_ref: "DEMO-SET-02"
+        status: implemented
+        enabled: true
+        kind: scalar
+        access: read_write
+        read: { wire_type: u16, source: g_demoBrightness }
+        write:
+          commands: [write_u8, write_u16]
+          target: g_demoBrightness
+          validation: { minimum: 10, maximum: 100, policy: clamp }
+          storage: { kind: eeprom_u8, function: Demo_Eeprom_WriteByte, address: 1 }
+          after_write: { function: Demo_ApplyBrightness }
+
+      - subindex: 10
+        name: reserved_option
+        description: "预留选项"
+        protocol_ref: "DEMO-SET-10"
+        status: planned
+        enabled: false
+
+  - index: 0x2100
+    name: demo_diagnostics
+    description: "演示诊断"
+    enabled: true
+    entries:
+      - subindex: 1
+        name: digital_inputs
+        description: "数字输入状态"
+        protocol_ref: "DEMO-DIAG-01"
+        status: implemented
+        enabled: true
+        kind: bitfield
+        access: read_only
+        read:
+          wire_type: u32
+          bits:
+            - { bit: 0, source: g_demoInputA, active: high }
+            - { bit: 1, source: g_demoInputB, active: high }
+
+      - subindex: 2
+        name: sensor_value
+        description: "传感器示例值"
+        protocol_ref: "DEMO-DIAG-02"
+        status: implemented
+        enabled: true
+        kind: scalar
+        access: read_only
+        read:
+          wire_type: u16
+          source: g_demoSensorRaw
+          transform: { kind: divide_integer, divisor: 10 }
+
+      - subindex: 3
+        name: indicator_state
+        description: "指示状态"
+        protocol_ref: "DEMO-DIAG-03"
+        status: implemented
+        enabled: true
+        kind: hook
+        access: read_write
+        read: { wire_type: u32, hook: read_indicator }
+        write: { commands: [write_u32], hook: write_indicator }
+
+  - index: 0x2200
+    name: demo_product_info
+    description: "演示产品信息"
+    enabled: true
+    entries:
+      - subindex: { from: 1, to: 4 }
+        name: version_chunks
+        description: "版本字符分包"
+        protocol_ref: "DEMO-INFO-01-04"
+        status: implemented
+        enabled: true
+        kind: chunked_buffer
+        access: read_only
+        read: { wire_type: u32 }
+        buffer:
+          source: g_demoVersion
+          length: 16
+          chunk_size: 4
+          first_subindex: 1
+          padding: 0x00
+
+  - index: 0x2300
+    name: demo_control
+    description: "演示控制"
+    enabled: true
+    entries:
+      - subindex: 1
+        name: reset_demo
+        description: "复位演示设备"
+        protocol_ref: "DEMO-CTL-01"
+        status: implemented
+        enabled: true
+        kind: action
+        access: write_only
+        write:
+          commands: [write_u32]
+          authorization: { kind: magic_value, value: 0xA5A55A5A }
+          acknowledge_before_hook: true
+          hook: reset_demo_device
+
+  - index: 0x2400
+    name: demo_calendar
+    description: "演示日期字段"
+    enabled: true
+    entries:
+      - subindex: { from: 1, to: 3 }
+        name: calendar_fields
+        description: "年、月、日"
+        protocol_ref: "DEMO-DATE-01-03"
+        status: implemented
+        enabled: true
+        kind: transaction_fields
+        access: read_write
+        fields:
+          - { subindex: 1, name: year, source: g_demoYear }
+          - { subindex: 2, name: month, source: g_demoMonth }
+          - { subindex: 3, name: day, source: g_demoDay }
+        read: { wire_type: u16 }
+        write: { commands: [write_u16], hook: write_calendar_field }
