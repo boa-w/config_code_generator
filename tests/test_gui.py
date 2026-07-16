@@ -39,6 +39,23 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
 
     window.object_tree.setCurrentItem(window.object_tree.topLevelItem(1))
 
+    assert window.entry_model.data(window.entry_model.index(0, 4)) == "已实现"
+    assert window.entry_model.data(window.entry_model.index(0, 5)) == "读写"
+    assert window.entry_model.data(window.entry_model.index(0, 6)) == "标量"
+    assert window.entry_editor.status.currentText() == "已实现"
+    assert window.entry_editor.status.currentData() == "implemented"
+    assert window.entry_editor.access.currentText() == "读写"
+    assert window.entry_editor.access.currentData() == "read_write"
+    assert window.entry_editor.kind.currentText() == "标量"
+    assert window.entry_editor.kind.currentData() == "scalar"
+    assert "单个变量" in window.entry_editor.kind_description.text()
+
+    verified_index = window.entry_editor.status.findData("verified")
+    window.entry_editor.status.setCurrentIndex(verified_index)
+    assert window.controller.document.objects[0]["entries"][0]["status"] == "verified"
+    assert window.entry_editor.status.currentText() == "已验证"
+    window.controller.undo_stack.undo()
+
     enabled_index = window.entry_model.index(0, 0)
     assert window.entry_model.setData(enabled_index, Qt.Unchecked, Qt.CheckStateRole)
     assert window.controller.document.objects[0]["entries"][0]["enabled"] is False

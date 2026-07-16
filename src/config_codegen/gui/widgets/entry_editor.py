@@ -14,6 +14,13 @@ from PySide6.QtWidgets import (
 from ruamel.yaml.comments import CommentedMap
 
 from config_codegen.gui.controller import DocumentController
+from config_codegen.gui.i18n import (
+    ACCESS_OPTIONS,
+    KIND_DESCRIPTIONS,
+    KIND_OPTIONS,
+    STATUS_OPTIONS,
+    option_label,
+)
 
 
 class EntryEditor(QWidget):
@@ -28,12 +35,14 @@ class EntryEditor(QWidget):
         self.name = QLineEdit()
         self.description = QLineEdit()
         self.status = QComboBox()
-        self.status.setEditable(True)
-        self.status.addItems(["planned", "implemented", "verified", "deprecated"])
         self.access = QComboBox()
-        self.access.addItems(["read_only", "write_only", "read_write"])
         self.kind = QComboBox()
-        self.kind.addItems(["scalar", "bitfield", "hook", "action", "transaction_fields", "chunked_buffer"])
+        self._populate_combo(self.status, STATUS_OPTIONS)
+        self._populate_combo(self.access, ACCESS_OPTIONS)
+        self._populate_combo(self.kind, KIND_OPTIONS)
+        self.kind_description = QLabel()
+        self.kind_description.setObjectName("kindDescription")
+        self.kind_description.setWordWrap(True)
         self.read_enabled = QCheckBox("读取代码")
         self.write_enabled = QCheckBox("写入代码")
 
@@ -46,6 +55,7 @@ class EntryEditor(QWidget):
         form.addRow("状态", self.status)
         form.addRow("访问权限", self.access)
         form.addRow("实现类型", self.kind)
+        form.addRow("类型说明", self.kind_description)
         form.addRow("操作", self.read_enabled)
         form.addRow("", self.write_enabled)
 
@@ -64,13 +74,31 @@ class EntryEditor(QWidget):
         self.protocol_ref.editingFinished.connect(lambda: self._set("protocol_ref", self.protocol_ref.text(), "编辑协议编号"))
         self.name.editingFinished.connect(lambda: self._set("name", self.name.text(), "编辑内部名称"))
         self.description.editingFinished.connect(lambda: self._set("description", self.description.text(), "编辑显示名称"))
-        self.status.currentTextChanged.connect(lambda value: self._set("status", value, "编辑状态"))
-        self.access.currentTextChanged.connect(lambda value: self._set("access", value, "编辑访问权限"))
-        self.kind.currentTextChanged.connect(lambda value: self._set("kind", value, "编辑实现类型"))
+        self.status.currentIndexChanged.connect(
+            lambda: self._set_combo("status", self.status, "编辑状态")
+        )
+        self.access.currentIndexChanged.connect(
+            lambda: self._set_combo("access", self.access, "编辑访问权限")
+        )
+        self.kind.currentIndexChanged.connect(self._kind_changed)
         self.read_enabled.clicked.connect(lambda value: self._set_operation("read", value))
         self.write_enabled.clicked.connect(lambda value: self._set_operation("write", value))
         self.controller.changed.connect(self.refresh)
         self.set_entry(None)
+
+    @staticmethod
+    def _populate_combo(combo: QComboBox, options: tuple[tuple[str, str], ...]) -> None:
+        for code, label in options:
+            combo.addItem(label, code)
+
+    @staticmethod
+    def _select_code(combo: QComboBox, code: object, options: tuple[tuple[str, str], ...]) -> None:
+        value = str(code or "")
+        index = combo.findData(value)
+        if index < 0:
+            combo.addItem(option_label(options, value), value)
+            index = combo.count() - 1
+        combo.setCurrentIndex(index)
 
     def set_entry(self, entry: CommentedMap | None) -> None:
         self.entry = entry
@@ -80,6 +108,16 @@ class EntryEditor(QWidget):
         if self._refreshing or self.entry is None:
             return
         self.controller.set_value(self.entry, key, value, label)
+
+    def _set_combo(self, key: str, combo: QComboBox, label: str) -> None:
+        value = combo.currentData()
+        if isinstance(value, str):
+            self._set(key, value, label)
+
+    def _kind_changed(self) -> None:
+        code = str(self.kind.currentData() or "")
+        self.kind_description.setText(KIND_DESCRIPTIONS.get(code, "未知实现类型。"))
+        self._set("kind", code, "编辑实现类型")
 
     def _set_operation(self, operation: str, value: bool) -> None:
         if self._refreshing or self.entry is None:
@@ -100,6 +138,7 @@ class EntryEditor(QWidget):
                 self.status,
                 self.access,
                 self.kind,
+                self.kind_description,
             ):
                 widget.setEnabled(available)
             if not available:
@@ -107,6 +146,7 @@ class EntryEditor(QWidget):
                 self.name.clear()
                 self.description.clear()
                 self.raw_yaml.clear()
+                self.kind_description.clear()
                 self.read_enabled.setEnabled(False)
                 self.write_enabled.setEnabled(False)
                 return
@@ -115,9 +155,12 @@ class EntryEditor(QWidget):
             self.protocol_ref.setText(str(self.entry.get("protocol_ref", "")))
             self.name.setText(str(self.entry.get("name", "")))
             self.description.setText(str(self.entry.get("description", "")))
-            self.status.setCurrentText(str(self.entry.get("status", "")))
-            self.access.setCurrentText(str(self.entry.get("access", "read_write")))
-            self.kind.setCurrentText(str(self.entry.get("kind", "scalar")))
+            self._select_code(self.status, self.entry.get("status", ""), STATUS_OPTIONS)
+            self._select_code(self.access, self.entry.get("access", ""), ACCESS_OPTIONS)
+            self._select_code(self.kind, self.entry.get("kind", ""), KIND_OPTIONS)
+            self.kind_description.setText(
+                KIND_DESCRIPTIONS.get(str(self.entry.get("kind", "")), "未知实现类型。")
+            )
             read = self.entry.get("read")
             write = self.entry.get("write")
             self.read_enabled.setEnabled(isinstance(read, dict))

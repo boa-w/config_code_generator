@@ -8,10 +8,17 @@ from ruamel.yaml.comments import CommentedMap
 
 from config_codegen.document import format_subindex
 from config_codegen.gui.controller import DocumentController
+from config_codegen.gui.i18n import (
+    ACCESS_OPTIONS,
+    KIND_DESCRIPTIONS,
+    KIND_OPTIONS,
+    STATUS_OPTIONS,
+    option_label,
+)
 
 
 class EntryTableModel(QAbstractTableModel):
-    HEADERS = ("启用", "协议编号", "SubIndex", "名称", "状态", "访问", "类型")
+    HEADERS = ("启用", "协议编号", "SubIndex", "名称", "状态", "访问权限", "实现类型")
 
     def __init__(self, controller: DocumentController, parent: Any = None) -> None:
         super().__init__(parent)
@@ -55,6 +62,8 @@ class EntryTableModel(QAbstractTableModel):
             return Qt.Checked if enabled else Qt.Unchecked
         if role == Qt.ForegroundRole and not enabled:
             return QColor("#888888")
+        if role == Qt.ToolTipRole and index.column() == 6:
+            return KIND_DESCRIPTIONS.get(str(entry.get("kind", "")), "未知实现类型。")
         if role not in (Qt.DisplayRole, Qt.EditRole):
             return None
         values = (
@@ -62,9 +71,9 @@ class EntryTableModel(QAbstractTableModel):
             entry.get("protocol_ref", ""),
             format_subindex(entry.get("subindex", "")),
             entry.get("description", entry.get("name", "")),
-            entry.get("status", ""),
-            entry.get("access", "-"),
-            entry.get("kind", "-"),
+            option_label(STATUS_OPTIONS, entry.get("status", "")),
+            option_label(ACCESS_OPTIONS, entry.get("access", "")),
+            option_label(KIND_OPTIONS, entry.get("kind", "")),
         )
         return values[index.column()]
 
@@ -72,7 +81,7 @@ class EntryTableModel(QAbstractTableModel):
         flags = super().flags(index) | Qt.ItemIsSelectable | Qt.ItemIsEnabled
         if index.column() == 0:
             return flags | Qt.ItemIsUserCheckable
-        if index.column() in {1, 3, 4}:
+        if index.column() in {1, 3}:
             return flags | Qt.ItemIsEditable
         return flags
 
@@ -83,7 +92,7 @@ class EntryTableModel(QAbstractTableModel):
         if index.column() == 0 and role == Qt.CheckStateRole:
             self.controller.set_value(entry, "enabled", value == Qt.Checked, "切换协议条目")
             return True
-        keys = {1: "protocol_ref", 3: "description", 4: "status"}
+        keys = {1: "protocol_ref", 3: "description"}
         if role == Qt.EditRole and index.column() in keys:
             self.controller.set_value(entry, keys[index.column()], str(value), "编辑协议条目")
             return True

@@ -142,6 +142,10 @@ def apply_theme(application: QApplication) -> None:
             color: #182126;
             spacing: 6px;
         }
+        QLabel#kindDescription {
+            color: #526168;
+            padding: 3px 0;
+        }
         QToolTip {
             background-color: #202B31;
             color: #F7FAFB;
