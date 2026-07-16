@@ -38,7 +38,26 @@ release asset is written to
 `config/protocol.example.yaml` beside the EXE directory so it remains editable.
 
 Every push to `main` runs tests, builds the Windows x64 portable package, smoke
-tests the packaged EXE, and replaces the asset in the `nightly` prerelease.
+tests the packaged EXE, and replaces the ZIP and `update-manifest.json` assets
+in the `nightly` prerelease.
+
+## Application updates
+
+The About page provides the complete manual update flow: check the nightly
+channel, download the package, verify its declared size and SHA-256 digest, and
+install it after confirmation. Automatic checks are not scheduled; the update
+service exposes a reserved configuration interface for a future opt-in policy.
+
+On Windows, a separate one-file updater waits for the editor to exit, replaces
+the portable runtime, and restarts the new version. The entire external
+`config/` directory is preserved. If the new process does not report a healthy
+startup within the timeout, the updater restores the previous runtime and
+restarts it. ZIP extraction rejects path traversal, symbolic links, excessive
+file counts, and excessive expanded size.
+
+The nightly manifest uses the GitHub Actions `run_number` as a monotonic build
+number. Local builds default to build 1; official workflow builds embed their
+actual run number in the application and manifest.
 
 ## Versioning
 

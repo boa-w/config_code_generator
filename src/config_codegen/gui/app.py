@@ -33,6 +33,7 @@ def _parser() -> argparse.ArgumentParser:
         help="YAML configuration to open",
     )
     parser.add_argument("--smoke-test", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--update-health-file", type=Path, help=argparse.SUPPRESS)
     return parser
 
 
@@ -57,6 +58,13 @@ def main(argv: list[str] | None = None) -> int:
         window.close()
         return 0 if valid else 3
     window.show()
+    if args.update_health_file is not None:
+        application.processEvents()
+        try:
+            args.update_health_file.parent.mkdir(parents=True, exist_ok=True)
+            args.update_health_file.write_text(get_version(), encoding="utf-8")
+        except OSError:
+            return 4
     return application.exec()
 
 

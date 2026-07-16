@@ -6,6 +6,7 @@ from PySide6.QtCore import QModelIndex, QSettings, QTimer, Qt
 from PySide6.QtGui import QAction, QBrush, QCloseEvent, QColor, QFontDatabase
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QApplication,
     QFileDialog,
     QHeaderView,
     QListWidget,
@@ -43,6 +44,7 @@ class MainWindow(QMainWindow):
         self.selected_object: CommentedMap | None = None
         self._tree_refreshing = False
         self._last_preview = PreviewResult(False, (), "", "")
+        self._update_shutdown = False
 
         self.setWindowTitle("协议配置管理")
         self.setMinimumSize(1024, 640)
@@ -177,6 +179,7 @@ class MainWindow(QMainWindow):
 
         self.basic_editor = BasicConfigEditor(self.controller)
         self.about_page = AboutPage()
+        self.about_page.install_requested.connect(self._install_update)
         self.entry_editor = EntryEditor(self.controller)
         self.content_stack = QStackedWidget()
         self.content_stack.addWidget(self.entry_table)
@@ -498,8 +501,24 @@ class MainWindow(QMainWindow):
         except (ConfigError, OSError) as exc:
             QMessageBox.critical(self, "生成失败", str(exc))
 
-    def closeEvent(self, event: QCloseEvent) -> None:
+    def _install_update(self) -> None:
         if not self._confirm_discard():
+            return
+        if QMessageBox.question(
+            self,
+            "安装更新",
+            "程序将关闭并安装已下载的更新，完成后自动重新启动。是否继续？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No,
+        ) != QMessageBox.Yes:
+            return
+        self.about_page.update_service.install_update()
+        if self.about_page.update_service.state == "installing":
+            self._update_shutdown = True
+            QApplication.quit()
+
+    def closeEvent(self, event: QCloseEvent) -> None:
+        if not self._update_shutdown and not self._confirm_discard():
             event.ignore()
             return
         self.settings.setValue("mainWindowGeometry", self.saveGeometry())

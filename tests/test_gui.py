@@ -42,6 +42,10 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     assert window.content_stack.currentWidget() is window.about_page
     assert window.output_tabs.isHidden()
     assert window.about_page.version_info.version.startswith(BASE_VERSION)
+    assert window.about_page.check_button.isEnabled()
+    assert not window.about_page.download_button.isEnabled()
+    assert not window.about_page.install_button.isEnabled()
+    assert window.about_page.update_status.text() == "尚未检查更新"
     window.about_page.copy_version_info()
     assert window.about_page.version_info.version in qapp.clipboard().text()
 

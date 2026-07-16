@@ -64,7 +64,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: config-code-generator-nightly-windows-x64
-          path: artifacts/config-code-generator-nightly-windows-x64.zip
+          path: |
+            artifacts/config-code-generator-nightly-windows-x64.zip
+            artifacts/update-manifest.json
           if-no-files-found: error
 
       - name: Update nightly release
@@ -90,11 +92,16 @@ jobs:
           if ($LASTEXITCODE -eq 0) {
             gh release edit nightly --title "Nightly ($shortSha)" --notes $notes --prerelease
             if ($LASTEXITCODE -ne 0) { throw "Failed to update nightly release" }
-            gh release upload nightly artifacts/config-code-generator-nightly-windows-x64.zip --clobber
+            gh release upload nightly `
+              artifacts/config-code-generator-nightly-windows-x64.zip `
+              artifacts/update-manifest.json `
+              --clobber
             if ($LASTEXITCODE -ne 0) { throw "Failed to replace nightly asset" }
           }
           else {
-            gh release create nightly artifacts/config-code-generator-nightly-windows-x64.zip `
+            gh release create nightly `
+              artifacts/config-code-generator-nightly-windows-x64.zip `
+              artifacts/update-manifest.json `
               --title "Nightly ($shortSha)" `
               --notes $notes `
               --prerelease `
