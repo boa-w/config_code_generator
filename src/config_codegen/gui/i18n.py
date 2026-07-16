@@ -36,6 +36,22 @@ KIND_DESCRIPTIONS = {
     "chunked_buffer": "将数组或字符串按固定字节数拆分到多个 SubIndex。",
 }
 
+HOOK_CONTRACT_OPTIONS = (
+    ("generic", "通用 / 未约束"),
+    ("read", "读取值"),
+    ("write", "写入或操作"),
+    ("transaction", "事务字段写入"),
+    ("chunk_write", "分包缓冲区写入"),
+)
+
+HOOK_CONTRACT_DESCRIPTIONS = {
+    "generic": "兼容旧配置，不限制引用位置。建议新 Hook 选择明确契约。",
+    "read": "uint32_t Hook(void)",
+    "write": "bool Hook(uint32_t value)",
+    "transaction": "bool Hook(uint8_t subindex, uint32_t value)",
+    "chunk_write": "bool Hook(uint8_t subindex, const uint8_t payload[4])",
+}
+
 
 def option_label(options: tuple[tuple[str, str], ...], code: object) -> str:
     value = str(code or "")

@@ -12,6 +12,22 @@ from .errors import ConfigError
 
 _C_REFERENCE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*|\[[0-9]+\])*$")
 _C_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_BUSINESS_STRING_FIELDS = {
+    "requirement_ref",
+    "category",
+    "unit",
+    "value_semantics",
+    "notes",
+    "owner",
+    "verification_ref",
+}
+_IMPLEMENTATION_STRING_FIELDS = {
+    "source_file",
+    "source_symbol",
+    "module",
+    "notes",
+}
+HOOK_CONTRACTS = {"generic", "read", "write", "transaction", "chunk_write"}
 
 
 def as_int(value: Any, path: str) -> int:
@@ -37,6 +53,25 @@ def require_reference(value: str, path: str) -> str:
     if not isinstance(value, str) or not _C_REFERENCE.fullmatch(value):
         raise ConfigError(f"{path}: invalid C reference {value!r}")
     return value
+
+
+def _validate_description_mapping(
+    entry: dict[str, Any], key: str, allowed_fields: set[str], path: str
+) -> None:
+    node = entry.get(key)
+    if node is None:
+        return
+    if not isinstance(node, dict):
+        raise ConfigError(f"{path}.{key}: expected mapping")
+    unknown = set(node) - allowed_fields
+    if unknown:
+        raise ConfigError(f"{path}.{key}: unsupported fields {', '.join(sorted(unknown))}")
+    for field, value in node.items():
+        if field == "default_value":
+            if isinstance(value, (dict, list)):
+                raise ConfigError(f"{path}.{key}.{field}: expected scalar value")
+        elif not isinstance(value, str):
+            raise ConfigError(f"{path}.{key}.{field}: expected string")
 
 
 @dataclass(frozen=True)
@@ -78,6 +113,8 @@ class GeneratorConfig:
     error_command: int
     error_codes: dict[str, int]
     hooks: dict[str, str]
+    hook_contracts: dict[str, str]
+    hook_descriptions: dict[str, str]
     entries: tuple[ExpandedEntry, ...]
 
 
@@ -102,6 +139,18 @@ def _expand_entries(raw: dict[str, Any]) -> tuple[ExpandedEntry, ...]:
         for entry_pos, entry in enumerate(entries):
             entry_path = f"{base}.entries[{entry_pos}]"
             name = require_identifier(entry.get("name"), f"{entry_path}.name")
+            _validate_description_mapping(
+                entry,
+                "business",
+                _BUSINESS_STRING_FIELDS | {"default_value"},
+                entry_path,
+            )
+            _validate_description_mapping(
+                entry,
+                "implementation",
+                _IMPLEMENTATION_STRING_FIELDS,
+                entry_path,
+            )
             enabled = object_enabled and bool(entry.get("enabled", True))
             kind = entry.get("kind", "unimplemented")
             access = entry.get("access", "none")
@@ -156,6 +205,15 @@ def load_config(path: str | Path) -> GeneratorConfig:
     if str(raw.get("schema_version")) != "1.0":
         raise ConfigError("schema_version: expected '1.0'")
 
+    project = raw.get("project", {})
+    if not isinstance(project, dict):
+        raise ConfigError("project: expected mapping")
+    for field in ("name", "description", "source_file", "source_handler", "generated_notice"):
+        if field in project and not isinstance(project[field], str):
+            raise ConfigError(f"project.{field}: expected string")
+    if project.get("source_handler"):
+        require_identifier(project["source_handler"], "project.source_handler")
+
     generator = raw.get("generator", {})
     output = generator.get("output", {})
     fragment_path = Path(output.get("fragment", "generated/protocol_switch.inc"))
@@ -193,9 +251,30 @@ def load_config(path: str | Path) -> GeneratorConfig:
             raise ConfigError(f"protocol.errors.codes: missing {required}")
 
     hook_functions: dict[str, str] = {}
-    for name, function in raw.get("hooks", {}).items():
+    hook_contracts: dict[str, str] = {}
+    hook_descriptions: dict[str, str] = {}
+    for name, definition in raw.get("hooks", {}).items():
         require_identifier(name, f"hooks.{name}")
-        hook_functions[name] = require_identifier(function, f"hooks.{name}")
+        if isinstance(definition, str):
+            function = definition
+            contract = "generic"
+            description = ""
+        elif isinstance(definition, dict):
+            unknown = set(definition) - {"function", "contract", "description"}
+            if unknown:
+                raise ConfigError(f"hooks.{name}: unsupported fields {', '.join(sorted(unknown))}")
+            function = definition.get("function")
+            contract = definition.get("contract", "generic")
+            description = definition.get("description", "")
+            if contract not in HOOK_CONTRACTS:
+                raise ConfigError(f"hooks.{name}.contract: unsupported contract {contract!r}")
+            if not isinstance(description, str):
+                raise ConfigError(f"hooks.{name}.description: expected string")
+        else:
+            raise ConfigError(f"hooks.{name}: expected function name or mapping")
+        hook_functions[name] = require_identifier(function, f"hooks.{name}.function")
+        hook_contracts[name] = contract
+        hook_descriptions[name] = description
 
     config = GeneratorConfig(
         path=config_path,
@@ -213,6 +292,8 @@ def load_config(path: str | Path) -> GeneratorConfig:
         error_command=as_int(errors.get("response_command"), "protocol.errors.response_command"),
         error_codes=error_codes,
         hooks=hook_functions,
+        hook_contracts=hook_contracts,
+        hook_descriptions=hook_descriptions,
         entries=_expand_entries(raw),
     )
     _validate_references(config)
@@ -232,6 +313,21 @@ def _validate_references(config: GeneratorConfig) -> None:
             raise ConfigError(f"{path}: writable entry requires write configuration")
         if isinstance(read, dict) and "source" in read:
             require_reference(read["source"], f"{path}.read.source")
+        if isinstance(read, dict):
+            wire_type = read.get("wire_type")
+            if wire_type not in {"u8", "u16", "u32"}:
+                raise ConfigError(f"{path}.read.wire_type: expected u8, u16 or u32")
+            seen_bits: set[int] = set()
+            for bit_pos, bit in enumerate(read.get("bits", [])):
+                if not isinstance(bit, dict):
+                    raise ConfigError(f"{path}.read.bits[{bit_pos}]: expected mapping")
+                position = as_int(bit.get("bit"), f"{path}.read.bits[{bit_pos}].bit")
+                if not 0 <= position <= 31 or position in seen_bits:
+                    raise ConfigError(f"{path}.read.bits[{bit_pos}].bit: invalid or duplicate bit")
+                seen_bits.add(position)
+                require_reference(bit.get("source"), f"{path}.read.bits[{bit_pos}].source")
+                if bit.get("active", "high") not in {"high", "low"}:
+                    raise ConfigError(f"{path}.read.bits[{bit_pos}].active: expected high or low")
         if entry.field and "source" in entry.field:
             require_reference(entry.field["source"], f"{path}.field.source")
         if isinstance(write, dict):
@@ -243,5 +339,33 @@ def _validate_references(config: GeneratorConfig) -> None:
             hook = write.get("hook")
             if hook is not None and hook not in config.hooks:
                 raise ConfigError(f"{path}: unknown hook {hook!r}")
+            if hook is not None:
+                expected_contract = (
+                    "transaction" if entry.kind == "transaction_fields"
+                    else "chunk_write" if entry.kind == "chunked_buffer"
+                    else "write"
+                )
+                _validate_hook_contract(config, hook, expected_contract, f"{path}.write.hook")
         if isinstance(read, dict) and read.get("hook") not in (None, *config.hooks.keys()):
             raise ConfigError(f"{path}: unknown hook {read.get('hook')!r}")
+        if isinstance(read, dict) and read.get("hook") is not None:
+            _validate_hook_contract(config, read["hook"], "read", f"{path}.read.hook")
+        if entry.kind == "chunked_buffer":
+            buffer = entry.raw.get("buffer")
+            if not isinstance(buffer, dict):
+                raise ConfigError(f"{path}.buffer: expected mapping")
+            require_reference(buffer.get("source"), f"{path}.buffer.source")
+            for field in ("length", "chunk_size", "first_subindex"):
+                if as_int(buffer.get(field), f"{path}.buffer.{field}") < 0:
+                    raise ConfigError(f"{path}.buffer.{field}: must not be negative")
+        implementation = entry.raw.get("implementation", {})
+        if implementation.get("source_symbol"):
+            require_reference(implementation["source_symbol"], f"{path}.implementation.source_symbol")
+
+
+def _validate_hook_contract(
+    config: GeneratorConfig, hook: str, expected: str, path: str
+) -> None:
+    contract = config.hook_contracts.get(hook, "generic")
+    if contract not in {"generic", expected}:
+        raise ConfigError(f"{path}: Hook contract {contract!r} is incompatible with {expected!r}")

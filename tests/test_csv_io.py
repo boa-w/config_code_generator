@@ -30,13 +30,15 @@ def test_csv_round_trip_preserves_logical_entries_and_nested_config(tmp_path: Pa
     assert objects[0]["entries"][0]["read"]["source"] == "g_demoLanguage"
     assert objects[4]["entries"][0]["fields"][0]["source"] == "g_demoYear"
     assert objects[1]["entries"][2]["write"]["hook"] == "write_indicator"
+    assert objects[0]["entries"][0]["business"]["requirement_ref"] == "DEMO-REQ-001"
+    assert objects[0]["entries"][0]["implementation"]["source_symbol"] == "g_demoLanguage"
     assert validate_and_preview(candidate).valid
 
 
 def test_csv_import_rejects_missing_columns(tmp_path: Path) -> None:
     path = tmp_path / "invalid.csv"
     with path.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=COLUMNS[:-1])
+        writer = csv.DictWriter(stream, fieldnames=tuple(column for column in COLUMNS if column != "read_json"))
         writer.writeheader()
 
     with pytest.raises(ConfigError, match="missing columns"):

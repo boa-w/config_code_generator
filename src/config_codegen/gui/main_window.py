@@ -160,7 +160,7 @@ class MainWindow(QMainWindow):
         self.entry_table.verticalHeader().setVisible(False)
         self.entry_table.horizontalHeader().setStretchLastSection(False)
         self.entry_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
-        self.entry_table.horizontalHeader().setSectionResizeMode(3, QHeaderView.Stretch)
+        self.entry_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         self.entry_table.selectionModel().selectionChanged.connect(self._entry_selected)
 
         fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)

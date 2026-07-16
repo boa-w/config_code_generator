@@ -80,15 +80,54 @@ protocol metadata editing, read/write operation switches, undo/redo, validation,
 generated fragment preview, and a diff against the current generated file.
 YAML comments and field order are preserved when saving.
 
-The `基础配置` node manages the generated fragment path, response CAN ID,
-transmit function, and the C references used for command, Index, SubIndex, and
-payload data. These project-level settings remain in YAML and are intentionally
-not replaced by CSV import.
+## Business and implementation descriptions
+
+Protocol entries can carry structured information that does not alter generated
+C code but keeps requirements, protocol behavior, and the target implementation
+traceable in one file:
+
+```yaml
+business:
+  requirement_ref: "DEMO-REQ-001"
+  category: display
+  unit: enum
+  default_value: 0
+  value_semantics: "0=Chinese, 1=English"
+  owner: display-team
+  verification_ref: "DEMO-TEST-001"
+  notes: "Applied immediately and retained after power loss."
+implementation:
+  source_file: demo_settings.c
+  source_symbol: g_demoLanguage
+  module: display_settings
+  notes: "Stored in one EEPROM byte."
+```
+
+The project mapping also accepts `description`, `source_file`, and
+`source_handler` to identify the handwritten handler from which a configuration
+was derived. These description fields are validated, shown in the GUI, and
+preserved by CSV import/export.
+
+The entry editor has four views. `概要` manages inventory state and generation
+selection; `业务` manages requirement and source traceability; `读写实现`
+manages wire types, commands, variables, hooks, validation, persistence,
+authorization, and chunked-buffer parameters; `高级` edits the complete entry
+YAML for bit lists, transaction fields, and uncommon combinations. Advanced
+changes participate in undo/redo and are checked by the normal live validator.
+
+The `基础配置` node manages project source information, the generated fragment
+path, response CAN ID, transmit function, error responses, commands, Hook
+aliases, and the C references used for command, Index, SubIndex, and payload
+data. These project-level settings remain in YAML and are intentionally not
+replaced by CSV import. Commands and Hooks use editable YAML blocks so adding a
+project-specific command does not require a GUI release.
 
 Entries can be added or deleted from the toolbar. New entries start as
 `planned` and disabled so incomplete implementation details cannot enter the
 generated fragment. CSV export uses UTF-8 with BOM for Excel compatibility and
-keeps nested `read`, `write`, `fields`, and `buffer` values in JSON columns.
+keeps nested `read`, `write`, `fields`, `buffer`, `business`, and
+`implementation` values in JSON columns. Older CSV files without the two
+description columns remain importable.
 CSV import validates the complete configuration, replaces only the `objects`
 inventory, and can be reverted with one undo operation.
 
@@ -110,6 +149,25 @@ Hook contracts used by generated call sites are:
 - Write/action hook: `bool Hook(uint32_t value)`
 - Transaction hook: `bool Hook(uint8_t subindex, uint32_t value)`
 - Chunk write hook: `bool Hook(uint8_t subindex, const uint8_t payload[4])`
+
+Hook aliases may use the compact legacy form or a structured definition:
+
+```yaml
+hooks:
+  read_indicator:
+    function: Demo_Hook_ReadIndicator
+    contract: read
+    description: "Read the current indicator state."
+```
+
+Supported contracts are `read`, `write`, `transaction`, `chunk_write`, and
+`generic`. The validator rejects a structured Hook used at an incompatible
+call site; `generic` retains compatibility with old string definitions. The
+GUI Hook registry supports adding, renaming, deleting, documenting, and
+changing contracts. Renames update every entry reference. Deleting a referenced
+Hook clears and disables those operations so invalid calls are not generated.
+The entry editor filters Hook choices by contract and can create and bind a new
+Hook directly from the read or write field.
 
 When `acknowledge_before_hook` is enabled, the generated handler sends the ACK
 first and intentionally ignores the hook return value. This is intended for

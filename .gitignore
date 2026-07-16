@@ -3,6 +3,8 @@
 
 # Local reference projects and source examples
 /example/
+/config/*.yaml
+!/config/protocol.example.yaml
 
 # Python bytecode and package artifacts
 __pycache__/

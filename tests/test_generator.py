@@ -75,3 +75,23 @@ def test_code_references_are_configurable(tmp_path: Path) -> None:
     assert "switch (Request.SubIndex)" in fragment
     assert "Request.Payload[5]" in fragment
     assert "Custom_Send(0x580" in fragment
+
+
+def test_business_description_rejects_unknown_fields(tmp_path: Path) -> None:
+    document = yaml.safe_load(SAMPLE.read_text(encoding="utf-8"))
+    document["objects"][0]["entries"][0]["business"]["unsupported"] = "value"
+    config_path = tmp_path / "invalid-business.yaml"
+    config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="unsupported fields"):
+        load_config(config_path)
+
+
+def test_hook_contract_rejects_incompatible_usage(tmp_path: Path) -> None:
+    document = yaml.safe_load(SAMPLE.read_text(encoding="utf-8"))
+    document["hooks"]["read_indicator"]["contract"] = "write"
+    config_path = tmp_path / "invalid-hook-contract.yaml"
+    config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="incompatible"):
+        load_config(config_path)

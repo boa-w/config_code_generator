@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from copy import deepcopy
 from typing import Any
 
 from PySide6.QtCore import QObject, Signal
@@ -37,6 +38,42 @@ class SetMappingValueCommand(QUndoCommand):
             self._mapping.pop(self._key, None)
         self._changed()
 
+
+class DeleteMappingValueCommand(QUndoCommand):
+    def __init__(self, mapping: dict[str, Any], key: str, text: str, changed: Callable[[], None]) -> None:
+        super().__init__(text)
+        self._mapping = mapping
+        self._key = key
+        self._value = mapping[key]
+        self._changed = changed
+
+    def redo(self) -> None:
+        self._mapping.pop(self._key, None)
+        self._changed()
+
+    def undo(self) -> None:
+        self._mapping[self._key] = self._value
+        self._changed()
+
+
+class ReplaceMappingCommand(QUndoCommand):
+    def __init__(self, mapping: dict[str, Any], value: dict[str, Any], text: str, changed: Callable[[], None]) -> None:
+        super().__init__(text)
+        self._mapping = mapping
+        self._before = deepcopy(mapping)
+        self._after = deepcopy(value)
+        self._changed = changed
+
+    def _apply(self, value: dict[str, Any]) -> None:
+        self._mapping.clear()
+        self._mapping.update(deepcopy(value))
+        self._changed()
+
+    def redo(self) -> None:
+        self._apply(self._after)
+
+    def undo(self) -> None:
+        self._apply(self._before)
 
 class InsertSequenceItemCommand(QUndoCommand):
     def __init__(self, sequence: list[Any], index: int, item: Any, text: str, changed: Callable[[], None]) -> None:
@@ -84,6 +121,13 @@ class DocumentController(QObject):
         if mapping.get(key) == value and key in mapping:
             return
         self.undo_stack.push(SetMappingValueCommand(mapping, key, value, label, self.changed.emit))
+
+    def delete_value(self, mapping: dict[str, Any], key: str, label: str) -> None:
+        if key in mapping:
+            self.undo_stack.push(DeleteMappingValueCommand(mapping, key, label, self.changed.emit))
+
+    def replace_mapping(self, mapping: dict[str, Any], value: dict[str, Any], label: str) -> None:
+        self.undo_stack.push(ReplaceMappingCommand(mapping, value, label, self.changed.emit))
 
     def insert_item(self, sequence: list[Any], index: int, item: Any, label: str) -> None:
         self.undo_stack.push(

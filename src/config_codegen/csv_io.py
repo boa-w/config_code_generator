@@ -30,7 +30,11 @@ COLUMNS = (
     "write_json",
     "fields_json",
     "buffer_json",
+    "business_json",
+    "implementation_json",
 )
+
+REQUIRED_COLUMNS = COLUMNS[:-2]
 
 
 def _plain(value: Any) -> Any:
@@ -109,6 +113,8 @@ def export_csv(document: ProtocolDocument, path: str | Path) -> Path:
                         "write_json": _json_cell(entry.get("write")),
                         "fields_json": _json_cell(entry.get("fields")),
                         "buffer_json": _json_cell(entry.get("buffer")),
+                        "business_json": _json_cell(entry.get("business")),
+                        "implementation_json": _json_cell(entry.get("implementation")),
                     }
                 )
     return destination
@@ -122,7 +128,7 @@ def import_csv(path: str | Path) -> CommentedSeq:
         raise ConfigError(f"cannot open CSV {source}: {exc}") from exc
     with stream:
         reader = csv.DictReader(stream)
-        missing = [column for column in COLUMNS if column not in (reader.fieldnames or [])]
+        missing = [column for column in REQUIRED_COLUMNS if column not in (reader.fieldnames or [])]
         if missing:
             raise ConfigError(f"CSV is missing columns: {', '.join(missing)}")
         objects = CommentedSeq()
@@ -187,8 +193,10 @@ def import_csv(path: str | Path) -> CommentedSeq:
                 ("write_json", "write", dict),
                 ("fields_json", "fields", list),
                 ("buffer_json", "buffer", dict),
+                ("business_json", "business", dict),
+                ("implementation_json", "implementation", dict),
             ):
-                value = _parse_json(row[column], column, row_number, expected)
+                value = _parse_json(row.get(column, ""), column, row_number, expected)
                 if value is not None:
                     entry[key] = value
             object_node["entries"].append(entry)

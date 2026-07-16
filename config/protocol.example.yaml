@@ -5,6 +5,9 @@ schema_version: "1.0"
 
 project:
   name: protocol_fragment_demo
+  description: "虚构设备协议代码生成示例"
+  source_file: demo_protocol_handler.c
+  source_handler: Demo_HandleProtocolRequest
   generated_notice: "AUTO-GENERATED FILE. DO NOT EDIT."
 
 generator:
@@ -46,8 +49,14 @@ protocol:
       invalid_key: 0x07
 
 hooks:
-  read_indicator: Demo_Hook_ReadIndicator
-  write_indicator: Demo_Hook_WriteIndicator
+  read_indicator:
+    function: Demo_Hook_ReadIndicator
+    contract: read
+    description: "读取指示状态，返回无符号 32 位值。"
+  write_indicator:
+    function: Demo_Hook_WriteIndicator
+    contract: write
+    description: "写入指示状态，返回是否接受该值。"
   write_calendar_field: Demo_Hook_WriteCalendarField
   reset_demo_device: Demo_Hook_ResetDevice
 
@@ -65,6 +74,18 @@ objects:
         enabled: true
         kind: scalar
         access: read_write
+        business:
+          requirement_ref: "DEMO-REQ-001"
+          category: display
+          unit: enum
+          default_value: 0
+          value_semantics: "0=中文，1=English"
+          notes: "修改后立即生效，并在掉电后保持。"
+        implementation:
+          source_file: demo_settings.c
+          source_symbol: g_demoLanguage
+          module: display_settings
+          notes: "使用单字节 EEPROM 保存。"
         read: { wire_type: u16, source: g_demoLanguage }
         write:
           commands: [write_u16]
