@@ -7,10 +7,12 @@ import sys
 from .errors import ConfigError
 from .generator import generate
 from .models import load_config
+from .version import get_version
 
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(prog="cfggen", description="Generate C switch-case handlers from YAML")
+    parser.add_argument("--version", action="version", version=get_version())
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     validate = subparsers.add_parser("validate", help="validate a configuration")

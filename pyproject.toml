@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "config-code-generator"
-version = "0.1.0"
+dynamic = ["version"]
 description = "Generate C switch-case protocol handlers from YAML"
 requires-python = ">=3.11"
 dependencies = [
@@ -30,6 +30,9 @@ cfggen-gui = "config_codegen.gui.app:main"
 
 [tool.setuptools.package-data]
 config_codegen = ["templates/*.j2"]
+
+[tool.setuptools.dynamic]
+version = {attr = "config_codegen.version.BASE_VERSION"}
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

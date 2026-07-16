@@ -146,6 +146,24 @@ def apply_theme(application: QApplication) -> None:
             color: #526168;
             padding: 3px 0;
         }
+        QLabel#aboutVersion {
+            color: #1F6670;
+            font-size: 16px;
+            font-weight: 600;
+        }
+        QPushButton {
+            background-color: #D7E3E5;
+            color: #183138;
+            border: 1px solid #9EB2B7;
+            padding: 6px 12px;
+        }
+        QPushButton:hover {
+            background-color: #C6DADD;
+            border-color: #28717A;
+        }
+        QPushButton:pressed {
+            background-color: #B5CDD1;
+        }
         QToolTip {
             background-color: #202B31;
             color: #F7FAFB;

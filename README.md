@@ -40,6 +40,22 @@ release asset is written to
 Every push to `main` runs tests, builds the Windows x64 portable package, smoke
 tests the packaged EXE, and replaces the asset in the `nightly` prerelease.
 
+## Versioning
+
+The manually maintained version is `BASE_VERSION` in
+`src/config_codegen/version.py`. Runtime versions use the form
+`<base>+g<8-character-commit>`, for example `0.1.0+g1a2b3c4d`.
+
+```powershell
+cfggen --version
+cfggen-gui --version
+```
+
+Development runs read the commit from Git. The EXE build embeds the current
+commit into a PyInstaller runtime hook and writes the same version into Windows
+file properties. Change only `BASE_VERSION` when manually releasing a new
+version.
+
 The desktop editor provides Index navigation, entry enable/disable controls,
 protocol metadata editing, read/write operation switches, undo/redo, validation,
 generated fragment preview, and a diff against the current generated file.

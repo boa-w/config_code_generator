@@ -29,6 +29,7 @@ from config_codegen.errors import ConfigError
 from config_codegen.generator import generate
 from config_codegen.gui.controller import DocumentController
 from config_codegen.gui.models.entry_table_model import EntryTableModel
+from config_codegen.gui.widgets.about_page import AboutPage
 from config_codegen.gui.widgets.basic_config_editor import BasicConfigEditor
 from config_codegen.gui.widgets.entry_editor import EntryEditor
 from config_codegen.preview import PreviewResult, validate_and_preview
@@ -128,6 +129,14 @@ class MainWindow(QMainWindow):
         generate_action.setShortcut("F7")
         generate_action.triggered.connect(self.generate_fragment)
         toolbar.addAction(generate_action)
+        toolbar.addSeparator()
+
+        self.about_action = QAction(
+            self.style().standardIcon(QStyle.SP_MessageBoxInformation), "关于", self
+        )
+        self.about_action.setShortcut("F1")
+        self.about_action.triggered.connect(self.show_about)
+        toolbar.addAction(self.about_action)
 
     def _build_workspace(self) -> None:
         self.object_tree = QTreeWidget()
@@ -167,10 +176,12 @@ class MainWindow(QMainWindow):
         self.output_tabs.addTab(self.diff_preview, "Diff")
 
         self.basic_editor = BasicConfigEditor(self.controller)
+        self.about_page = AboutPage()
         self.entry_editor = EntryEditor(self.controller)
         self.content_stack = QStackedWidget()
         self.content_stack.addWidget(self.entry_table)
         self.content_stack.addWidget(self.basic_editor)
+        self.content_stack.addWidget(self.about_page)
         self.content_stack.setCurrentWidget(self.entry_table)
 
         middle = QSplitter(Qt.Vertical)
@@ -217,6 +228,14 @@ class MainWindow(QMainWindow):
                 self.object_tree.addTopLevelItem(item)
                 if object_node is selected:
                     selected_item = item
+            about_item = QTreeWidgetItem(["关于  /  版本信息", ""])
+            about_item.setData(0, Qt.UserRole, "__about__")
+            about_item.setIcon(0, self.style().standardIcon(QStyle.SP_MessageBoxInformation))
+            about_font = about_item.font(0)
+            about_font.setBold(True)
+            about_item.setFont(0, about_font)
+            about_item.setToolTip(0, "版本和构建信息")
+            self.object_tree.addTopLevelItem(about_item)
             if selected_item is None and self.object_tree.topLevelItemCount() > 1:
                 selected_item = self.object_tree.topLevelItem(1)
             if selected_item is not None:
@@ -232,12 +251,24 @@ class MainWindow(QMainWindow):
             self.entry_model.set_object(None)
             self.entry_editor.set_entry(None)
             self.content_stack.setCurrentWidget(self.basic_editor)
+            self.output_tabs.show()
+            self.entry_editor.hide()
+            self.add_entry_action.setEnabled(False)
+            self.delete_entry_action.setEnabled(False)
+            return
+        if selected == "__about__":
+            self.selected_object = None
+            self.entry_model.set_object(None)
+            self.entry_editor.set_entry(None)
+            self.content_stack.setCurrentWidget(self.about_page)
+            self.output_tabs.hide()
             self.entry_editor.hide()
             self.add_entry_action.setEnabled(False)
             self.delete_entry_action.setEnabled(False)
             return
         self.selected_object = selected
         self.content_stack.setCurrentWidget(self.entry_table)
+        self.output_tabs.show()
         self.entry_editor.show()
         self.add_entry_action.setEnabled(self.selected_object is not None)
         self.delete_entry_action.setEnabled(self.selected_object is not None)
@@ -249,6 +280,12 @@ class MainWindow(QMainWindow):
     def show_basic_config(self) -> None:
         if self.object_tree.topLevelItemCount():
             self.object_tree.setCurrentItem(self.object_tree.topLevelItem(0))
+
+    def show_about(self) -> None:
+        if self.object_tree.topLevelItemCount():
+            self.object_tree.setCurrentItem(
+                self.object_tree.topLevelItem(self.object_tree.topLevelItemCount() - 1)
+            )
 
     def _object_toggled(self, item: QTreeWidgetItem, column: int) -> None:
         if self._tree_refreshing or column != 0:

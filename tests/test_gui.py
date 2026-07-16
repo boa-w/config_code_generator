@@ -8,6 +8,7 @@ from PySide6.QtWidgets import QMessageBox
 from config_codegen.document import ProtocolDocument
 from config_codegen.gui.main_window import MainWindow
 from config_codegen.gui.theme import apply_theme
+from config_codegen.version import BASE_VERSION
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -24,7 +25,7 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     qtbot.addWidget(window)
     window.show()
 
-    assert window.object_tree.topLevelItemCount() == 6
+    assert window.object_tree.topLevelItemCount() == 7
     assert window.entry_model.rowCount() == 3
     assert window._last_preview.valid
 
@@ -36,6 +37,13 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     window.basic_editor.transmit_function.editingFinished.emit()
     assert window.controller.document.data["protocol"]["response"]["transmit_function"] == "Custom_Send"
     window.controller.undo_stack.undo()
+
+    window.about_action.trigger()
+    assert window.content_stack.currentWidget() is window.about_page
+    assert window.output_tabs.isHidden()
+    assert window.about_page.version_info.version.startswith(BASE_VERSION)
+    window.about_page.copy_version_info()
+    assert window.about_page.version_info.version in qapp.clipboard().text()
 
     window.object_tree.setCurrentItem(window.object_tree.topLevelItem(1))
 

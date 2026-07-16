@@ -14,7 +14,7 @@ analysis = Analysis(
     hiddenimports=[],
     hookspath=[],
     hooksconfig={},
-    runtime_hooks=[],
+    runtime_hooks=[str(root / "build" / "version_runtime_hook.py")],
     excludes=[],
     noarchive=False,
 )
@@ -31,6 +31,7 @@ exe = EXE(
     strip=False,
     upx=True,
     console=False,
+    version=str(root / "build" / "windows_version_info.txt"),
     disable_windowed_traceback=False,
     argv_emulation=False,
     target_arch=None,

@@ -10,6 +10,7 @@ from config_codegen.document import ProtocolDocument
 from config_codegen.errors import ConfigError
 from config_codegen.gui.main_window import MainWindow
 from config_codegen.gui.theme import apply_theme
+from config_codegen.version import get_version
 
 
 def _default_config_path() -> Path:
@@ -23,6 +24,7 @@ def _default_config_path() -> Path:
 
 def _parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Graphical protocol configuration editor")
+    parser.add_argument("--version", action="version", version=get_version())
     parser.add_argument(
         "config",
         nargs="?",
