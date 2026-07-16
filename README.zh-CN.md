@@ -19,7 +19,7 @@ cfggen generate config/protocol.example.yaml
 pytest
 ```
 
-生成结果是可以直接嵌入现有函数的代码片段，不包含完整函数、头文件、解析器或运行时辅助代码。
+生成结果是可以直接嵌入现有函数的代码片段。默认不生成头文件、解析器或运行时辅助代码；显式开启的 Hook 可以额外生成包装函数定义片段。
 
 ## 图形化编辑器
 
@@ -37,6 +37,8 @@ cfggen-gui config/protocol.example.yaml
 - YAML 注释与字段顺序的往返保存。
 
 条目检查器会根据实现类型和访问权限，只显示当前条目需要的控件。例如标量条目显示变量、范围和存储配置；Hook 条目显示契约匹配的 Hook；分包条目显示缓冲区参数。业务追踪信息默认折叠，完整条目 YAML 放在专家入口中。
+
+底部 `Hook 实现` 页签用于预览可生成的 Hook 包装函数，`代码预览` 继续只显示 switch-case 处理片段。
 
 ## 新增条目
 
@@ -114,6 +116,37 @@ hooks:
 - `generic`：兼容旧配置，不限制引用位置。
 
 校验器会拒绝契约与调用位置不匹配的结构化 Hook。GUI 支持新增、重命名、删除、说明和修改契约；重命名会同步所有条目引用，删除被引用的 Hook 会清除引用并停用相关操作。条目检查器会按契约过滤候选 Hook，也可以在读取或写入字段旁直接创建并绑定。
+
+### 生成 Hook 包装函数
+
+Hook 默认仍由目标项目手写。需要生成包装函数时，为 Hook 增加 `generate` 配置，并设置独立输出路径：
+
+```yaml
+generator:
+  output:
+    fragment: generated/demo_protocol_switch.inc
+    hook_implementations: generated/demo_protocol_hooks.inc
+
+hooks:
+  write_indicator:
+    function: Demo_Hook_WriteIndicator
+    contract: write
+    description: "应用指示状态。"
+    generate:
+      enabled: true
+      call_function: Demo_ApplyIndicatorState
+      arguments: [value]
+      return_policy: forward
+```
+
+`call_function` 是包装函数实际调用的业务函数。`arguments` 只能选择当前契约提供的参数，可以传递全部参数、受支持的部分参数或不传参数。返回策略包括：
+
+- `forward`：直接返回业务函数结果；
+- `always_success`：以 `void` 方式调用业务函数，然后固定返回 `true`。
+
+读取 Hook 必须使用 `forward`。GUI 的 Hook 管理页可以配置是否生成、实际调用函数、参数传递和返回策略，并在修改后实时预览生成代码。
+
+Hook 实现片段只生成函数定义，不生成 `#include` 或目标函数声明。目标项目应先声明实际业务函数，再包含 Hook 实现片段，最后包含 switch-case 片段。所有 `call_function` 仍由目标项目实现或链接。
 
 当 `acknowledge_before_hook` 开启时，生成代码会先发送 ACK，再调用 Hook，并有意忽略 Hook 返回值。这适用于复位等可能不会返回的操作。
 

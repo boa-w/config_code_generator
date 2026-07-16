@@ -97,10 +97,22 @@ class ExpandedEntry:
 
 
 @dataclass(frozen=True)
+class HookImplementation:
+    alias: str
+    function: str
+    contract: str
+    description: str
+    call_function: str
+    arguments: tuple[str, ...]
+    return_policy: str
+
+
+@dataclass(frozen=True)
 class GeneratorConfig:
     path: Path
     raw: dict[str, Any]
     fragment_path: Path
+    hook_fragment_path: Path | None
     command_reference: str
     index_reference: str
     subindex_reference: str
@@ -115,6 +127,7 @@ class GeneratorConfig:
     hooks: dict[str, str]
     hook_contracts: dict[str, str]
     hook_descriptions: dict[str, str]
+    hook_implementations: dict[str, HookImplementation]
     entries: tuple[ExpandedEntry, ...]
 
 
@@ -217,6 +230,8 @@ def load_config(path: str | Path) -> GeneratorConfig:
     generator = raw.get("generator", {})
     output = generator.get("output", {})
     fragment_path = Path(output.get("fragment", "generated/protocol_switch.inc"))
+    hook_fragment_value = output.get("hook_implementations")
+    hook_fragment_path = Path(hook_fragment_value) if hook_fragment_value else None
 
     protocol = raw.get("protocol", {})
     references = protocol.get("code_references", {})
@@ -253,6 +268,7 @@ def load_config(path: str | Path) -> GeneratorConfig:
     hook_functions: dict[str, str] = {}
     hook_contracts: dict[str, str] = {}
     hook_descriptions: dict[str, str] = {}
+    hook_implementations: dict[str, HookImplementation] = {}
     for name, definition in raw.get("hooks", {}).items():
         require_identifier(name, f"hooks.{name}")
         if isinstance(definition, str):
@@ -260,7 +276,7 @@ def load_config(path: str | Path) -> GeneratorConfig:
             contract = "generic"
             description = ""
         elif isinstance(definition, dict):
-            unknown = set(definition) - {"function", "contract", "description"}
+            unknown = set(definition) - {"function", "contract", "description", "generate"}
             if unknown:
                 raise ConfigError(f"hooks.{name}: unsupported fields {', '.join(sorted(unknown))}")
             function = definition.get("function")
@@ -275,11 +291,88 @@ def load_config(path: str | Path) -> GeneratorConfig:
         hook_functions[name] = require_identifier(function, f"hooks.{name}.function")
         hook_contracts[name] = contract
         hook_descriptions[name] = description
+        generate_node = definition.get("generate") if isinstance(definition, dict) else None
+        if generate_node is not None:
+            if not isinstance(generate_node, dict):
+                raise ConfigError(f"hooks.{name}.generate: expected mapping")
+            unknown = set(generate_node) - {
+                "enabled",
+                "call_function",
+                "arguments",
+                "return_policy",
+            }
+            if unknown:
+                raise ConfigError(
+                    f"hooks.{name}.generate: unsupported fields {', '.join(sorted(unknown))}"
+                )
+            if bool(generate_node.get("enabled", True)):
+                if contract == "generic":
+                    raise ConfigError(
+                        f"hooks.{name}.generate: generated Hook requires an explicit contract"
+                    )
+                call_function = require_identifier(
+                    generate_node.get("call_function"),
+                    f"hooks.{name}.generate.call_function",
+                )
+                if call_function == function:
+                    raise ConfigError(
+                        f"hooks.{name}.generate.call_function: must not call the wrapper itself"
+                    )
+                allowed_arguments = {
+                    "read": (),
+                    "write": ("value",),
+                    "transaction": ("subindex", "value"),
+                    "chunk_write": ("subindex", "payload"),
+                }[contract]
+                raw_arguments = generate_node.get("arguments", list(allowed_arguments))
+                if not isinstance(raw_arguments, list) or not all(
+                    isinstance(argument, str) for argument in raw_arguments
+                ):
+                    raise ConfigError(f"hooks.{name}.generate.arguments: expected string list")
+                arguments = tuple(raw_arguments)
+                if len(set(arguments)) != len(arguments) or any(
+                    argument not in allowed_arguments for argument in arguments
+                ):
+                    raise ConfigError(
+                        f"hooks.{name}.generate.arguments: incompatible with {contract!r} contract"
+                    )
+                return_policy = str(generate_node.get("return_policy", "forward"))
+                if return_policy not in {"forward", "always_success"}:
+                    raise ConfigError(
+                        f"hooks.{name}.generate.return_policy: expected forward or always_success"
+                    )
+                if contract == "read" and return_policy != "forward":
+                    raise ConfigError(
+                        f"hooks.{name}.generate.return_policy: read Hook must forward its result"
+                    )
+                hook_implementations[name] = HookImplementation(
+                    alias=name,
+                    function=hook_functions[name],
+                    contract=contract,
+                    description=description,
+                    call_function=call_function,
+                    arguments=arguments,
+                    return_policy=return_policy,
+                )
+
+    if hook_implementations and hook_fragment_path is None:
+        raise ConfigError(
+            "generator.output.hook_implementations: required when generated Hooks are enabled"
+        )
+    generated_functions: dict[str, str] = {}
+    for alias, implementation in hook_implementations.items():
+        previous = generated_functions.get(implementation.function)
+        if previous is not None:
+            raise ConfigError(
+                f"hooks.{alias}.function: generated wrapper duplicates Hook {previous!r}"
+            )
+        generated_functions[implementation.function] = alias
 
     config = GeneratorConfig(
         path=config_path,
         raw=raw,
         fragment_path=fragment_path,
+        hook_fragment_path=hook_fragment_path,
         command_reference=require_reference(references.get("command"), "protocol.code_references.command"),
         index_reference=require_reference(references.get("index"), "protocol.code_references.index"),
         subindex_reference=require_reference(references.get("subindex"), "protocol.code_references.subindex"),
@@ -294,6 +387,7 @@ def load_config(path: str | Path) -> GeneratorConfig:
         hooks=hook_functions,
         hook_contracts=hook_contracts,
         hook_descriptions=hook_descriptions,
+        hook_implementations=hook_implementations,
         entries=_expand_entries(raw),
     )
     _validate_references(config)

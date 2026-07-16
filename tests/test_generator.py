@@ -4,7 +4,7 @@ import pytest
 import yaml
 
 from config_codegen.errors import ConfigError
-from config_codegen.generator import generate
+from config_codegen.generator import generate, generate_outputs
 from config_codegen.models import load_config
 
 
@@ -26,8 +26,10 @@ def test_sample_config_expands_ranges() -> None:
 
 
 def test_generates_nested_switches_and_hooks(tmp_path: Path) -> None:
-    fragment_path = generate(SAMPLE, tmp_path)
+    fragment_path, hook_path = generate_outputs(SAMPLE, tmp_path)
     source = fragment_path.read_text(encoding="utf-8")
+    assert hook_path is not None
+    hooks = hook_path.read_text(encoding="utf-8")
 
     assert "if (DemoRequest.Command == 0x40)" in source
     assert "    if (DemoRequest.Index == 0x2000)" in source
@@ -43,6 +45,14 @@ def test_generates_nested_switches_and_hooks(tmp_path: Path) -> None:
     reset = "(void)Demo_Hook_ResetDevice("
     reset_case = source[source.index("case 1: // [DEMO-CTL-01] 复位演示设备") :]
     assert reset_case.index(ack) < reset_case.index(reset)
+    assert "uint32_t Demo_Hook_ReadIndicator(void)" in hooks
+    assert "return Demo_ReadIndicatorState();" in hooks
+    assert "bool Demo_Hook_WriteIndicator(uint32_t value)" in hooks
+    assert "return Demo_ApplyIndicatorState(value);" in hooks
+    assert "(void)Demo_ResetDevice();" in hooks
+    assert "(void)value;" in hooks
+    assert "return true;" in hooks
+    assert "#include" not in hooks
 
 
 def test_duplicate_object_is_rejected(tmp_path: Path) -> None:
@@ -94,4 +104,20 @@ def test_hook_contract_rejects_incompatible_usage(tmp_path: Path) -> None:
     config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
 
     with pytest.raises(ConfigError, match="incompatible"):
+        load_config(config_path)
+
+
+def test_generated_hook_rejects_invalid_arguments_and_missing_output(tmp_path: Path) -> None:
+    document = yaml.safe_load(SAMPLE.read_text(encoding="utf-8"))
+    document["hooks"]["write_indicator"]["generate"]["arguments"] = ["payload"]
+    config_path = tmp_path / "invalid-hook-arguments.yaml"
+    config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ConfigError, match="arguments"):
+        load_config(config_path)
+
+    document = yaml.safe_load(SAMPLE.read_text(encoding="utf-8"))
+    del document["generator"]["output"]["hook_implementations"]
+    config_path = tmp_path / "missing-hook-output.yaml"
+    config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+    with pytest.raises(ConfigError, match="hook_implementations"):
         load_config(config_path)

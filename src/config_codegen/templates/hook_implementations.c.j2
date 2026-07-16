@@ -1,0 +1,17 @@
+// {{ config.raw.project.generated_notice }}
+// Generated Hook wrappers. Include this fragment before the switch fragment.
+{% for hook in hooks %}
+// {{ hook.description }}
+{{ hook.return_type }} {{ hook.function }}({{ hook.parameters }})
+{
+{% for argument in hook.unused_arguments %}
+    (void){{ argument }};
+{% endfor %}
+{% if hook.return_policy == "forward" %}
+    return {{ hook.call }};
+{% else %}
+    (void){{ hook.call }};
+    return true;
+{% endif %}
+}
+{% endfor %}

@@ -29,6 +29,8 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     assert window.object_tree.topLevelItemCount() == 10
     assert window.entry_model.rowCount() == 3
     assert window._last_preview.valid
+    assert "Demo_Hook_ReadIndicator" in window._last_preview.hook_fragment
+    assert "Demo_Hook_ReadIndicator" in window.hook_preview.toPlainText()
 
     window.basic_config_action.trigger()
     assert window.content_stack.currentWidget() is window.basic_editor
@@ -42,6 +44,16 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     assert window.controller.document.data["protocol"]["response"]["transmit_function"] == "Custom_Send"
     window.controller.undo_stack.undo()
     registry = window.basic_editor.hook_registry
+    assert registry.generate_enabled.isChecked()
+    assert registry.call_function.text() == "Demo_ReadIndicatorState"
+    assert registry.arguments.currentData() == ""
+    registry.call_function.setText("Demo_ReadIndicatorStateV2")
+    registry.call_function.editingFinished.emit()
+    assert (
+        window.controller.document.data["hooks"]["read_indicator"]["generate"]["call_function"]
+        == "Demo_ReadIndicatorStateV2"
+    )
+    window.controller.undo_stack.undo()
     assert registry.create_hook("new_demo_hook")
     assert window.controller.document.data["hooks"]["new_demo_hook"]["function"] == "new_demo_hook"
     window.controller.undo_stack.undo()

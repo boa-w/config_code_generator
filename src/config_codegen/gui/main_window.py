@@ -32,7 +32,7 @@ from ruamel.yaml.comments import CommentedMap
 from config_codegen.csv_io import export_csv, import_csv
 from config_codegen.document import ProtocolDocument, format_number
 from config_codegen.errors import ConfigError
-from config_codegen.generator import generate
+from config_codegen.generator import generate_outputs
 from config_codegen.gui.controller import DocumentController
 from config_codegen.gui.entry_capabilities import create_entry_from_template
 from config_codegen.gui.models.entry_table_model import EntryTableModel
@@ -213,10 +213,14 @@ class MainWindow(QMainWindow):
         self.diff_preview = QPlainTextEdit()
         self.diff_preview.setReadOnly(True)
         self.diff_preview.setFont(fixed_font)
+        self.hook_preview = QPlainTextEdit()
+        self.hook_preview.setReadOnly(True)
+        self.hook_preview.setFont(fixed_font)
 
         self.output_tabs = QTabWidget()
         self.output_tabs.addTab(self.issue_list, "校验问题")
         self.output_tabs.addTab(self.code_preview, "代码预览")
+        self.output_tabs.addTab(self.hook_preview, "Hook 实现")
         self.output_tabs.addTab(self.diff_preview, "Diff")
 
         self.basic_editor = BasicConfigEditor(self.controller)
@@ -549,6 +553,7 @@ class MainWindow(QMainWindow):
             self.output_tabs.setCurrentWidget(self.issue_list)
             self.statusBar().showMessage("配置校验失败")
         self.code_preview.setPlainText(self._last_preview.fragment)
+        self.hook_preview.setPlainText(self._last_preview.hook_fragment or "未配置生成型 Hook")
         self.diff_preview.setPlainText(self._last_preview.diff or "无差异")
 
     def _confirm_discard(self) -> bool:
@@ -600,8 +605,11 @@ class MainWindow(QMainWindow):
         if not self.save_document():
             return
         try:
-            path = generate(self.controller.document.path)
-            self.statusBar().showMessage(f"已生成 {path}", 5000)
+            path, hook_path = generate_outputs(self.controller.document.path)
+            message = f"已生成 {path}"
+            if hook_path is not None:
+                message += f" 和 {hook_path}"
+            self.statusBar().showMessage(message, 5000)
             self.refresh_preview()
             self.output_tabs.setCurrentWidget(self.code_preview)
         except (ConfigError, OSError) as exc:

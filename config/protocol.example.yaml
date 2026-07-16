@@ -13,6 +13,7 @@ project:
 generator:
   output:
     fragment: generated/demo_protocol_switch.inc
+    hook_implementations: generated/demo_protocol_hooks.inc
 
 protocol:
   code_references:
@@ -53,12 +54,30 @@ hooks:
     function: Demo_Hook_ReadIndicator
     contract: read
     description: "读取指示状态，返回无符号 32 位值。"
+    generate:
+      enabled: true
+      call_function: Demo_ReadIndicatorState
+      arguments: []
+      return_policy: forward
   write_indicator:
     function: Demo_Hook_WriteIndicator
     contract: write
     description: "写入指示状态，返回是否接受该值。"
+    generate:
+      enabled: true
+      call_function: Demo_ApplyIndicatorState
+      arguments: [value]
+      return_policy: forward
   write_calendar_field: Demo_Hook_WriteCalendarField
-  reset_demo_device: Demo_Hook_ResetDevice
+  reset_demo_device:
+    function: Demo_Hook_ResetDevice
+    contract: write
+    description: "调用无参数复位函数，包装层固定返回成功。"
+    generate:
+      enabled: true
+      call_function: Demo_ResetDevice
+      arguments: []
+      return_policy: always_success
 
 objects:
   - index: 0x2000

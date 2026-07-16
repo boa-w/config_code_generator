@@ -7,6 +7,7 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFocusEvent
 from PySide6.QtWidgets import (
     QAbstractItemView,
+    QCheckBox,
     QComboBox,
     QFormLayout,
     QHBoxLayout,
@@ -14,6 +15,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QLineEdit,
     QListWidget,
+    QListWidgetItem,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
@@ -70,12 +72,24 @@ class HookRegistryEditor(QWidget):
         self.signature.setWordWrap(True)
         self.description = _CommitTextEdit()
         self.description.setMaximumHeight(90)
+        self.generate_enabled = QCheckBox("生成 Hook 包装函数")
+        self.call_function = QLineEdit()
+        self.call_function.setPlaceholderText("实际业务函数名称")
+        self.arguments = QComboBox()
+        self.return_policy = QComboBox()
+        self.return_policy.addItem("转发调用结果", "forward")
+        self.return_policy.addItem("调用后固定返回成功", "always_success")
         detail_form = QFormLayout()
         detail_form.addRow("配置别名", self.alias_label)
         detail_form.addRow("C 函数", self.function)
         detail_form.addRow("调用契约", self.contract)
         detail_form.addRow("函数签名", self.signature)
         detail_form.addRow("用途说明", self.description)
+        detail_form.addRow("代码生成", self.generate_enabled)
+        detail_form.addRow("实际调用函数", self.call_function)
+        detail_form.addRow("参数传递", self.arguments)
+        detail_form.addRow("返回策略", self.return_policy)
+        self.detail_form = detail_form
 
         left = QWidget()
         left_layout = QVBoxLayout(left)
@@ -97,6 +111,10 @@ class HookRegistryEditor(QWidget):
         self.function.editingFinished.connect(self._save_definition)
         self.contract.currentIndexChanged.connect(self._contract_changed)
         self.description.editingFinished.connect(self._save_definition)
+        self.generate_enabled.clicked.connect(self._save_definition)
+        self.call_function.editingFinished.connect(self._save_definition)
+        self.arguments.currentIndexChanged.connect(self._save_definition)
+        self.return_policy.currentIndexChanged.connect(self._save_definition)
         self.controller.changed.connect(self.refresh)
         self.refresh()
 
@@ -117,16 +135,19 @@ class HookRegistryEditor(QWidget):
         return hooks
 
     @staticmethod
-    def _parts(definition: Any) -> tuple[str, str, str]:
+    def _parts(definition: Any) -> tuple[str, str, str, dict[str, Any]]:
         if isinstance(definition, str):
-            return definition, "generic", ""
+            return definition, "generic", "", {}
         if isinstance(definition, dict):
             return (
                 str(definition.get("function", "")),
                 str(definition.get("contract", "generic")),
                 str(definition.get("description", "")),
+                definition.get("generate", {})
+                if isinstance(definition.get("generate"), dict)
+                else {},
             )
-        return "", "generic", ""
+        return "", "generic", "", {}
 
     def create_hook(self, alias: str) -> bool:
         alias = alias.strip()
@@ -228,7 +249,45 @@ class HookRegistryEditor(QWidget):
     def _contract_changed(self) -> None:
         code = str(self.contract.currentData() or "generic")
         self.signature.setText(HOOK_CONTRACT_DESCRIPTIONS.get(code, ""))
+        self._refresh_argument_options(code, None)
+        if code == "generic":
+            self.generate_enabled.setChecked(False)
+        if code == "read":
+            forward_index = self.return_policy.findData("forward")
+            self.return_policy.setCurrentIndex(max(0, forward_index))
         self._save_definition()
+
+    def _refresh_argument_options(self, contract: str, selected: Any) -> None:
+        choices = {
+            "generic": (("无", ""),),
+            "read": (("不传参数", ""),),
+            "write": (("传递 value", "value"), ("不传参数", "")),
+            "transaction": (
+                ("传递 subindex, value", "subindex,value"),
+                ("仅传递 value", "value"),
+                ("仅传递 subindex", "subindex"),
+                ("不传参数", ""),
+            ),
+            "chunk_write": (
+                ("传递 subindex, payload", "subindex,payload"),
+                ("仅传递 payload", "payload"),
+                ("仅传递 subindex", "subindex"),
+                ("不传参数", ""),
+            ),
+        }.get(contract, (("无", ""),))
+        if isinstance(selected, list):
+            selected_key = ",".join(str(item) for item in selected)
+        else:
+            selected_key = str(selected or "")
+        self.arguments.blockSignals(True)
+        try:
+            self.arguments.clear()
+            for label, value in choices:
+                self.arguments.addItem(label, value)
+            index = self.arguments.findData(selected_key)
+            self.arguments.setCurrentIndex(index if index >= 0 else 0)
+        finally:
+            self.arguments.blockSignals(False)
 
     def _save_definition(self) -> None:
         if self._refreshing or not self._selected_alias:
@@ -240,6 +299,16 @@ class HookRegistryEditor(QWidget):
                 "description": self.description.toPlainText().strip(),
             }
         )
+        if self.generate_enabled.isChecked():
+            argument_key = str(self.arguments.currentData() or "")
+            definition["generate"] = CommentedMap(
+                {
+                    "enabled": True,
+                    "call_function": self.call_function.text().strip(),
+                    "arguments": [item for item in argument_key.split(",") if item],
+                    "return_policy": str(self.return_policy.currentData() or "forward"),
+                }
+            )
         self.controller.set_value(
             self._hooks(), self._selected_alias, definition, "编辑 Hook 定义"
         )
@@ -253,14 +322,32 @@ class HookRegistryEditor(QWidget):
             self.function.setEnabled(available)
             self.contract.setEnabled(available)
             self.description.setEnabled(available)
+            self.generate_enabled.setEnabled(available)
             self.rename_button.setEnabled(available)
             self.delete_button.setEnabled(available)
-            function, contract, description = self._parts(definition)
+            function, contract, description, generate = self._parts(definition)
             self.function.setText(function)
             index = self.contract.findData(contract)
             self.contract.setCurrentIndex(max(0, index))
             self.signature.setText(HOOK_CONTRACT_DESCRIPTIONS.get(contract, ""))
             self.description.setPlainText(description)
+            generated = bool(generate.get("enabled", True)) if generate else False
+            self.generate_enabled.setChecked(generated)
+            self.call_function.setText(str(generate.get("call_function", "")))
+            self.call_function.setStyleSheet(
+                "border: 1px solid #B13A32;"
+                if generated and not self.call_function.text().strip()
+                else ""
+            )
+            self._refresh_argument_options(contract, generate.get("arguments"))
+            return_policy = str(generate.get("return_policy", "forward"))
+            return_index = self.return_policy.findData(return_policy)
+            self.return_policy.setCurrentIndex(max(0, return_index))
+            generation_available = available and contract != "generic"
+            self.generate_enabled.setEnabled(generation_available)
+            for widget in (self.call_function, self.arguments, self.return_policy):
+                widget.setEnabled(generation_available and generated)
+            self.detail_form.setRowVisible(self.return_policy, contract != "read")
         finally:
             self._refreshing = False
 
@@ -270,7 +357,15 @@ class HookRegistryEditor(QWidget):
         self._refreshing = True
         try:
             self.hook_list.clear()
-            self.hook_list.addItems(list(hooks))
+            for alias, definition in hooks.items():
+                item = QListWidgetItem(str(alias))
+                generate = definition.get("generate") if isinstance(definition, dict) else None
+                if isinstance(generate, dict) and bool(generate.get("enabled", True)):
+                    item.setIcon(self.style().standardIcon(QStyle.SP_DialogApplyButton))
+                    item.setToolTip(
+                        f"生成包装函数，调用 {generate.get('call_function', '')}"
+                    )
+                self.hook_list.addItem(item)
             if selected:
                 matches = self.hook_list.findItems(selected, Qt.MatchExactly)
                 if matches:

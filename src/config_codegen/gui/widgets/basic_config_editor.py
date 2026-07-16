@@ -35,6 +35,7 @@ class BasicConfigEditor(QWidget):
         self.source_handler = QLineEdit()
         self.generated_notice = QLineEdit()
         self.fragment_path = QLineEdit()
+        self.hook_fragment_path = QLineEdit()
         self.response_can_id = QLineEdit()
         self.transmit_function = QLineEdit()
         self.command_reference = QLineEdit()
@@ -56,6 +57,7 @@ class BasicConfigEditor(QWidget):
             self.source_handler,
             self.generated_notice,
             self.fragment_path,
+            self.hook_fragment_path,
             self.response_can_id,
             self.transmit_function,
             self.command_reference,
@@ -78,6 +80,7 @@ class BasicConfigEditor(QWidget):
         project_layout.addWidget(self._section("输出、响应与 C 引用"))
         project_layout.addLayout(self._form(
             ("输出片段", self.fragment_path),
+            ("Hook 实现片段", self.hook_fragment_path),
             ("响应 CAN ID", self.response_can_id),
             ("发送函数", self.transmit_function),
             ("命令引用", self.command_reference),
@@ -179,6 +182,12 @@ class BasicConfigEditor(QWidget):
             (self.source_handler, self._project, "source_handler", "编辑协议处理函数"),
             (self.generated_notice, self._project, "generated_notice", "编辑生成文件声明"),
             (self.fragment_path, self._generator_output, "fragment", "编辑输出路径"),
+            (
+                self.hook_fragment_path,
+                self._generator_output,
+                "hook_implementations",
+                "编辑 Hook 实现输出路径",
+            ),
             (self.transmit_function, self._response, "transmit_function", "编辑发送函数"),
             (self.command_reference, self._references, "command", "编辑命令引用"),
             (self.index_reference, self._references, "index", "编辑 Index 引用"),
@@ -270,6 +279,9 @@ class BasicConfigEditor(QWidget):
             self.source_handler.setText(str(project.get("source_handler", "")))
             self.generated_notice.setText(str(project.get("generated_notice", "")))
             self.fragment_path.setText(str(self._generator_output().get("fragment", "")))
+            self.hook_fragment_path.setText(
+                str(self._generator_output().get("hook_implementations", ""))
+            )
             self.response_can_id.setText(self._number(response.get("can_id")))
             self.transmit_function.setText(str(response.get("transmit_function", "")))
             self.command_reference.setText(str(references.get("command", "")))

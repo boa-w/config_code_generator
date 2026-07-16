@@ -5,7 +5,7 @@ from pathlib import Path
 import sys
 
 from .errors import ConfigError
-from .generator import generate
+from .generator import generate_outputs
 from .models import load_config
 from .version import get_version
 
@@ -22,7 +22,7 @@ def _parser() -> argparse.ArgumentParser:
     list_parser.add_argument("config", type=Path)
     list_parser.add_argument("--enabled-only", action="store_true")
 
-    generate_parser = subparsers.add_parser("generate", help="generate C source and header")
+    generate_parser = subparsers.add_parser("generate", help="generate configured C fragments")
     generate_parser.add_argument("config", type=Path)
     generate_parser.add_argument("--output-root", type=Path)
     return parser
@@ -58,8 +58,10 @@ def main(argv: list[str] | None = None) -> int:
                 status = entry.raw.get("status", "-")
                 print(f"{state} {directions}  {protocol_ref:<16} {status:<12} {entry.description or entry.name}")
             return 0
-        fragment = generate(args.config, args.output_root)
+        fragment, hook_fragment = generate_outputs(args.config, args.output_root)
         print(f"generated: {fragment}")
+        if hook_fragment is not None:
+            print(f"generated: {hook_fragment}")
         return 0
     except ConfigError as exc:
         print(f"error: {exc}", file=sys.stderr)

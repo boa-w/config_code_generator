@@ -7,7 +7,15 @@ from typing import Any
 from jinja2 import Environment, PackageLoader, StrictUndefined
 
 from .errors import ConfigError
-from .models import Command, ExpandedEntry, GeneratorConfig, as_int, load_config, require_identifier
+from .models import (
+    Command,
+    ExpandedEntry,
+    GeneratorConfig,
+    HookImplementation,
+    as_int,
+    load_config,
+    require_identifier,
+)
 
 
 _WIRE_WIDTHS = {"u8": 1, "u16": 2, "u32": 4}
@@ -32,6 +40,17 @@ class CommandCase:
     value: int
     name: str
     indices: tuple[IndexCase, ...]
+
+
+@dataclass(frozen=True)
+class GeneratedHook:
+    function: str
+    return_type: str
+    parameters: str
+    description: str
+    call: str
+    return_policy: str
+    unused_arguments: tuple[str, ...]
 
 
 def _wire_width(node: dict[str, Any], path: str) -> int:
@@ -296,21 +315,72 @@ def _build_cases(config: GeneratorConfig) -> tuple[CommandCase, ...]:
     return tuple(command_cases)
 
 
-def generate(config_path: str | Path, output_root: str | Path | None = None) -> Path:
-    config = load_config(config_path)
-    root = Path(output_root).resolve() if output_root else config.path.parent.parent
-    fragment_path = root / config.fragment_path
-    fragment_path.parent.mkdir(parents=True, exist_ok=True)
-    environment = Environment(
+def _generated_hook(implementation: HookImplementation) -> GeneratedHook:
+    signatures = {
+        "read": ("uint32_t", "void"),
+        "write": ("bool", "uint32_t value"),
+        "transaction": ("bool", "uint8_t subindex, uint32_t value"),
+        "chunk_write": ("bool", "uint8_t subindex, const uint8_t payload[4]"),
+    }
+    return_type, parameters = signatures[implementation.contract]
+    contract_arguments = {
+        "read": (),
+        "write": ("value",),
+        "transaction": ("subindex", "value"),
+        "chunk_write": ("subindex", "payload"),
+    }[implementation.contract]
+    arguments = ", ".join(implementation.arguments)
+    return GeneratedHook(
+        function=implementation.function,
+        return_type=return_type,
+        parameters=parameters,
+        description=implementation.description or implementation.alias,
+        call=f"{implementation.call_function}({arguments})",
+        return_policy=implementation.return_policy,
+        unused_arguments=tuple(
+            argument
+            for argument in contract_arguments
+            if argument not in implementation.arguments
+        ),
+    )
+
+
+def _environment() -> Environment:
+    return Environment(
         loader=PackageLoader("config_codegen", "templates"),
         undefined=StrictUndefined,
         trim_blocks=True,
         lstrip_blocks=True,
         keep_trailing_newline=True,
     )
+
+
+def generate_outputs(
+    config_path: str | Path, output_root: str | Path | None = None
+) -> tuple[Path, Path | None]:
+    config = load_config(config_path)
+    root = Path(output_root).resolve() if output_root else config.path.parent.parent
+    environment = _environment()
+
+    fragment_path = root / config.fragment_path
+    fragment_path.parent.mkdir(parents=True, exist_ok=True)
     content = environment.get_template("switch_fragment.c.j2").render(
         config=config,
         commands=_build_cases(config),
     )
     fragment_path.write_text(content, encoding="utf-8", newline="\n")
-    return fragment_path
+
+    hook_path: Path | None = None
+    if config.hook_fragment_path is not None:
+        hook_path = root / config.hook_fragment_path
+        hook_path.parent.mkdir(parents=True, exist_ok=True)
+        hook_content = environment.get_template("hook_implementations.c.j2").render(
+            config=config,
+            hooks=tuple(_generated_hook(item) for item in config.hook_implementations.values()),
+        )
+        hook_path.write_text(hook_content, encoding="utf-8", newline="\n")
+    return fragment_path, hook_path
+
+
+def generate(config_path: str | Path, output_root: str | Path | None = None) -> Path:
+    return generate_outputs(config_path, output_root)[0]
