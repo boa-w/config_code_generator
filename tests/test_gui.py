@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QInputDialog, QMessageBox
 
 from config_codegen.document import ProtocolDocument
 from config_codegen.gui.main_window import MainWindow
+from config_codegen.gui.models.entry_table_model import EntryTableModel
 from config_codegen.gui.theme import apply_theme
 from config_codegen.version import BASE_VERSION
 
@@ -94,6 +95,15 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
 
     assert window.entry_model.data(window.entry_model.index(0, 5)) == "读写"
     assert window.entry_model.data(window.entry_model.index(0, 6)) == "标量"
+    assert window.entry_model.data(window.entry_model.index(0, 7)) == "uint16_t"
+    data_type_model = EntryTableModel(window.controller)
+    write_only_object = window.controller.document.objects[3]
+    data_type_model.set_object(write_only_object)
+    assert data_type_model.data(data_type_model.index(0, 7)) == "/"
+    write_only_entry = write_only_object["entries"][0]
+    write_only_entry["read"] = {"wire_type": "unsupported"}
+    assert data_type_model.data(data_type_model.index(0, 7)) == "/"
+    del write_only_entry["read"]
     assert window.entry_editor.access.currentText() == "读写"
     assert window.entry_editor.access.currentData() == "read_write"
     assert window.entry_editor.kind.currentText() == "标量"

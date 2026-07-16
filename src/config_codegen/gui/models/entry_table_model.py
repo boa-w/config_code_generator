@@ -12,12 +12,22 @@ from config_codegen.gui.i18n import (
     ACCESS_OPTIONS,
     KIND_DESCRIPTIONS,
     KIND_OPTIONS,
+    WIRE_TYPE_LABELS,
     option_label,
 )
 
 
 class EntryTableModel(QAbstractTableModel):
-    HEADERS = ("启用", "协议编号", "需求编号", "SubIndex", "名称", "访问权限", "实现类型")
+    HEADERS = (
+        "启用",
+        "协议编号",
+        "需求编号",
+        "SubIndex",
+        "名称",
+        "访问权限",
+        "实现类型",
+        "数据类型",
+    )
     SEARCH_ROLE = Qt.UserRole + 1
 
     def __init__(self, controller: DocumentController, parent: Any = None) -> None:
@@ -58,6 +68,9 @@ class EntryTableModel(QAbstractTableModel):
         if entry is None:
             return None
         enabled = bool(entry.get("enabled", True))
+        read = entry.get("read")
+        wire_type = str(read.get("wire_type", "")) if isinstance(read, dict) else ""
+        data_type = WIRE_TYPE_LABELS.get(wire_type, "/")
         if role == self.SEARCH_ROLE:
             business = entry.get("business", {})
             return " ".join(
@@ -68,6 +81,8 @@ class EntryTableModel(QAbstractTableModel):
                     entry.get("description", ""),
                     entry.get("access", ""),
                     entry.get("kind", ""),
+                    wire_type,
+                    data_type,
                     business.get("requirement_ref", ""),
                     business.get("category", ""),
                 )
@@ -88,6 +103,7 @@ class EntryTableModel(QAbstractTableModel):
             entry.get("description", entry.get("name", "")),
             option_label(ACCESS_OPTIONS, entry.get("access", "")),
             option_label(KIND_OPTIONS, entry.get("kind", "")),
+            data_type,
         )
         return values[index.column()]
 

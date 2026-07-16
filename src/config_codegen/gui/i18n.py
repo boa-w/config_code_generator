@@ -28,6 +28,12 @@ KIND_DESCRIPTIONS = {
     "chunked_buffer": "将数组或字符串按固定字节数拆分到多个 SubIndex。",
 }
 
+WIRE_TYPE_LABELS = {
+    "u8": "uint8_t",
+    "u16": "uint16_t",
+    "u32": "uint32_t",
+}
+
 HOOK_CONTRACT_OPTIONS = (
     ("read", "读取值"),
     ("write", "写入或操作"),
