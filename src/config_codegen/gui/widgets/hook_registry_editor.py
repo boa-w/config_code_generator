@@ -136,18 +136,16 @@ class HookRegistryEditor(QWidget):
 
     @staticmethod
     def _parts(definition: Any) -> tuple[str, str, str, dict[str, Any]]:
-        if isinstance(definition, str):
-            return definition, "generic", "", {}
         if isinstance(definition, dict):
             return (
                 str(definition.get("function", "")),
-                str(definition.get("contract", "generic")),
+                str(definition.get("contract", "")),
                 str(definition.get("description", "")),
                 definition.get("generate", {})
                 if isinstance(definition.get("generate"), dict)
                 else {},
             )
-        return "", "generic", "", {}
+        return "", "", "", {}
 
     def create_hook(self, alias: str) -> bool:
         alias = alias.strip()
@@ -156,7 +154,7 @@ class HookRegistryEditor(QWidget):
         definition = CommentedMap(
             {
                 "function": alias,
-                "contract": "generic",
+                "contract": "write",
                 "description": "",
             }
         )
@@ -247,11 +245,9 @@ class HookRegistryEditor(QWidget):
         self._refresh_detail()
 
     def _contract_changed(self) -> None:
-        code = str(self.contract.currentData() or "generic")
+        code = str(self.contract.currentData() or "write")
         self.signature.setText(HOOK_CONTRACT_DESCRIPTIONS.get(code, ""))
         self._refresh_argument_options(code, None)
-        if code == "generic":
-            self.generate_enabled.setChecked(False)
         if code == "read":
             forward_index = self.return_policy.findData("forward")
             self.return_policy.setCurrentIndex(max(0, forward_index))
@@ -259,7 +255,6 @@ class HookRegistryEditor(QWidget):
 
     def _refresh_argument_options(self, contract: str, selected: Any) -> None:
         choices = {
-            "generic": (("无", ""),),
             "read": (("不传参数", ""),),
             "write": (("传递 value", "value"), ("不传参数", "")),
             "transaction": (
@@ -295,7 +290,7 @@ class HookRegistryEditor(QWidget):
         definition = CommentedMap(
             {
                 "function": self.function.text().strip(),
-                "contract": str(self.contract.currentData() or "generic"),
+                "contract": str(self.contract.currentData() or "write"),
                 "description": self.description.toPlainText().strip(),
             }
         )
@@ -343,7 +338,7 @@ class HookRegistryEditor(QWidget):
             return_policy = str(generate.get("return_policy", "forward"))
             return_index = self.return_policy.findData(return_policy)
             self.return_policy.setCurrentIndex(max(0, return_index))
-            generation_available = available and contract != "generic"
+            generation_available = available and bool(contract)
             self.generate_enabled.setEnabled(generation_available)
             for widget in (self.call_function, self.arguments, self.return_policy):
                 widget.setEnabled(generation_available and generated)

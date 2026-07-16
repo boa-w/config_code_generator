@@ -706,15 +706,13 @@ class EntryEditor(QWidget):
         combo.clear()
         combo.addItem("", "")
         for alias, definition in hooks.items():
-            if isinstance(definition, str):
-                function, contract, description = definition, "generic", ""
-            elif isinstance(definition, dict):
+            if isinstance(definition, dict):
                 function = str(definition.get("function", ""))
-                contract = str(definition.get("contract", "generic"))
+                contract = str(definition.get("contract", ""))
                 description = str(definition.get("description", ""))
             else:
                 continue
-            if contract not in {"generic", expected} and alias != selected:
+            if contract != expected and alias != selected:
                 continue
             combo.addItem(str(alias), str(alias))
             tooltip = f"{function}\n{HOOK_CONTRACT_DESCRIPTIONS.get(contract, contract)}"

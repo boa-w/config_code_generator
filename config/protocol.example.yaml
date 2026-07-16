@@ -68,7 +68,10 @@ hooks:
       call_function: Demo_ApplyIndicatorState
       arguments: [value]
       return_policy: forward
-  write_calendar_field: Demo_Hook_WriteCalendarField
+  write_calendar_field:
+    function: Demo_Hook_WriteCalendarField
+    contract: transaction
+    description: "按 SubIndex 写入日期字段。"
   reset_demo_device:
     function: Demo_Hook_ResetDevice
     contract: write

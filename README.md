@@ -158,7 +158,7 @@ Hook contracts used by generated call sites are:
 - Transaction hook: `bool Hook(uint8_t subindex, uint32_t value)`
 - Chunk write hook: `bool Hook(uint8_t subindex, const uint8_t payload[4])`
 
-Hook aliases may use the compact legacy form or a structured definition:
+Every Hook uses a structured definition with an explicit call contract:
 
 ```yaml
 hooks:
@@ -199,12 +199,12 @@ target declarations. Include it after the target functions are declared and
 before the generated switch fragment. The surrounding project remains
 responsible for implementing or linking each configured `call_function`.
 
-Supported contracts are `read`, `write`, `transaction`, `chunk_write`, and
-`generic`. The validator rejects a structured Hook used at an incompatible
-call site; `generic` retains compatibility with old string definitions. The
-GUI Hook registry supports adding, renaming, deleting, documenting, and
-changing contracts. Renames update every entry reference. Deleting a referenced
-Hook clears and disables those operations so invalid calls are not generated.
+Supported contracts are `read`, `write`, `transaction`, and `chunk_write`.
+String-only Hook definitions and untyped contracts are rejected. The validator
+also rejects a Hook used at an incompatible call site. The GUI Hook registry
+supports adding, renaming, deleting, documenting, and changing contracts.
+Renames update every entry reference. Deleting a referenced Hook clears and
+disables those operations so invalid calls are not generated.
 The entry editor filters Hook choices by contract and can create and bind a new
 Hook directly from the read or write field. The Hook management page also
 controls wrapper generation, target function, forwarded arguments, and return

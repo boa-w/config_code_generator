@@ -90,14 +90,7 @@ implementation:
 
 ## Hook 配置
 
-Hook 可以使用旧版紧凑写法：
-
-```yaml
-hooks:
-  read_indicator: Demo_Hook_ReadIndicator
-```
-
-也可以使用包含契约和说明的结构化定义：
+每个 Hook 必须使用包含明确契约的结构化定义：
 
 ```yaml
 hooks:
@@ -112,10 +105,9 @@ hooks:
 - `read`：`uint32_t Hook(void)`；
 - `write`：`bool Hook(uint32_t value)`；
 - `transaction`：`bool Hook(uint8_t subindex, uint32_t value)`；
-- `chunk_write`：`bool Hook(uint8_t subindex, const uint8_t payload[4])`；
-- `generic`：兼容旧配置，不限制引用位置。
+- `chunk_write`：`bool Hook(uint8_t subindex, const uint8_t payload[4])`。
 
-校验器会拒绝契约与调用位置不匹配的结构化 Hook。GUI 支持新增、重命名、删除、说明和修改契约；重命名会同步所有条目引用，删除被引用的 Hook 会清除引用并停用相关操作。条目检查器会按契约过滤候选 Hook，也可以在读取或写入字段旁直接创建并绑定。
+字符串形式的 Hook 和未指定类型的契约会被拒绝。校验器也会拒绝契约与调用位置不匹配的 Hook。GUI 支持新增、重命名、删除、说明和修改契约；重命名会同步所有条目引用，删除被引用的 Hook 会清除引用并停用相关操作。条目检查器会按契约过滤候选 Hook，也可以在读取或写入字段旁直接创建并绑定。
 
 ### 生成 Hook 包装函数
 

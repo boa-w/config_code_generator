@@ -107,6 +107,31 @@ def test_hook_contract_rejects_incompatible_usage(tmp_path: Path) -> None:
         load_config(config_path)
 
 
+def test_string_hook_definition_is_rejected(tmp_path: Path) -> None:
+    document = yaml.safe_load(SAMPLE.read_text(encoding="utf-8"))
+    document["hooks"]["read_indicator"] = "Demo_Hook_ReadIndicator"
+    config_path = tmp_path / "legacy-string-hook.yaml"
+    config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="structured mapping"):
+        load_config(config_path)
+
+
+@pytest.mark.parametrize("contract", ["generic", None])
+def test_untyped_hook_contract_is_rejected(tmp_path: Path, contract: str | None) -> None:
+    document = yaml.safe_load(SAMPLE.read_text(encoding="utf-8"))
+    hook = document["hooks"]["read_indicator"]
+    if contract is None:
+        hook.pop("contract")
+    else:
+        hook["contract"] = contract
+    config_path = tmp_path / "untyped-hook.yaml"
+    config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+
+    with pytest.raises(ConfigError, match="unsupported contract"):
+        load_config(config_path)
+
+
 def test_generated_hook_rejects_invalid_arguments_and_missing_output(tmp_path: Path) -> None:
     document = yaml.safe_load(SAMPLE.read_text(encoding="utf-8"))
     document["hooks"]["write_indicator"]["generate"]["arguments"] = ["payload"]

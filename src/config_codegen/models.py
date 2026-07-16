@@ -27,7 +27,7 @@ _IMPLEMENTATION_STRING_FIELDS = {
     "module",
     "notes",
 }
-HOOK_CONTRACTS = {"generic", "read", "write", "transaction", "chunk_write"}
+HOOK_CONTRACTS = {"read", "write", "transaction", "chunk_write"}
 
 
 def as_int(value: Any, path: str) -> int:
@@ -271,27 +271,22 @@ def load_config(path: str | Path) -> GeneratorConfig:
     hook_implementations: dict[str, HookImplementation] = {}
     for name, definition in raw.get("hooks", {}).items():
         require_identifier(name, f"hooks.{name}")
-        if isinstance(definition, str):
-            function = definition
-            contract = "generic"
-            description = ""
-        elif isinstance(definition, dict):
-            unknown = set(definition) - {"function", "contract", "description", "generate"}
-            if unknown:
-                raise ConfigError(f"hooks.{name}: unsupported fields {', '.join(sorted(unknown))}")
-            function = definition.get("function")
-            contract = definition.get("contract", "generic")
-            description = definition.get("description", "")
-            if contract not in HOOK_CONTRACTS:
-                raise ConfigError(f"hooks.{name}.contract: unsupported contract {contract!r}")
-            if not isinstance(description, str):
-                raise ConfigError(f"hooks.{name}.description: expected string")
-        else:
-            raise ConfigError(f"hooks.{name}: expected function name or mapping")
+        if not isinstance(definition, dict):
+            raise ConfigError(f"hooks.{name}: expected structured mapping")
+        unknown = set(definition) - {"function", "contract", "description", "generate"}
+        if unknown:
+            raise ConfigError(f"hooks.{name}: unsupported fields {', '.join(sorted(unknown))}")
+        function = definition.get("function")
+        contract = definition.get("contract")
+        description = definition.get("description", "")
+        if contract not in HOOK_CONTRACTS:
+            raise ConfigError(f"hooks.{name}.contract: unsupported contract {contract!r}")
+        if not isinstance(description, str):
+            raise ConfigError(f"hooks.{name}.description: expected string")
         hook_functions[name] = require_identifier(function, f"hooks.{name}.function")
         hook_contracts[name] = contract
         hook_descriptions[name] = description
-        generate_node = definition.get("generate") if isinstance(definition, dict) else None
+        generate_node = definition.get("generate")
         if generate_node is not None:
             if not isinstance(generate_node, dict):
                 raise ConfigError(f"hooks.{name}.generate: expected mapping")
@@ -306,10 +301,6 @@ def load_config(path: str | Path) -> GeneratorConfig:
                     f"hooks.{name}.generate: unsupported fields {', '.join(sorted(unknown))}"
                 )
             if bool(generate_node.get("enabled", True)):
-                if contract == "generic":
-                    raise ConfigError(
-                        f"hooks.{name}.generate: generated Hook requires an explicit contract"
-                    )
                 call_function = require_identifier(
                     generate_node.get("call_function"),
                     f"hooks.{name}.generate.call_function",
@@ -460,6 +451,6 @@ def _validate_references(config: GeneratorConfig) -> None:
 def _validate_hook_contract(
     config: GeneratorConfig, hook: str, expected: str, path: str
 ) -> None:
-    contract = config.hook_contracts.get(hook, "generic")
-    if contract not in {"generic", expected}:
+    contract = config.hook_contracts[hook]
+    if contract != expected:
         raise ConfigError(f"{path}: Hook contract {contract!r} is incompatible with {expected!r}")

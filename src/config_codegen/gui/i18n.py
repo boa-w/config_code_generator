@@ -37,7 +37,6 @@ KIND_DESCRIPTIONS = {
 }
 
 HOOK_CONTRACT_OPTIONS = (
-    ("generic", "通用 / 未约束"),
     ("read", "读取值"),
     ("write", "写入或操作"),
     ("transaction", "事务字段写入"),
@@ -45,7 +44,6 @@ HOOK_CONTRACT_OPTIONS = (
 )
 
 HOOK_CONTRACT_DESCRIPTIONS = {
-    "generic": "兼容旧配置，不限制引用位置。建议新 Hook 选择明确契约。",
     "read": "uint32_t Hook(void)",
     "write": "bool Hook(uint32_t value)",
     "transaction": "bool Hook(uint8_t subindex, uint32_t value)",
