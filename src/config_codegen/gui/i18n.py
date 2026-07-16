@@ -1,14 +1,6 @@
 from __future__ import annotations
 
 
-STATUS_OPTIONS = (
-    ("", "未设置"),
-    ("planned", "规划中"),
-    ("implemented", "已实现"),
-    ("verified", "已验证"),
-    ("deprecated", "已废弃"),
-)
-
 ACCESS_OPTIONS = (
     ("", "未配置"),
     ("read_only", "只读"),

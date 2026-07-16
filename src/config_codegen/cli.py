@@ -55,8 +55,7 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 state = "ON " if enabled else "OFF"
                 directions = f"{'R' if read_on else '-'}/{'W' if write_on else '-'}"
-                status = entry.raw.get("status", "-")
-                print(f"{state} {directions}  {protocol_ref:<16} {status:<12} {entry.description or entry.name}")
+                print(f"{state} {directions}  {protocol_ref:<16} {entry.description or entry.name}")
             return 0
         fragment, hook_fragment = generate_outputs(args.config, args.output_root)
         print(f"generated: {fragment}")

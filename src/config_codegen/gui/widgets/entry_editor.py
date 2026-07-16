@@ -36,7 +36,6 @@ from config_codegen.gui.i18n import (
     KIND_DESCRIPTIONS,
     KIND_OPTIONS,
     HOOK_CONTRACT_DESCRIPTIONS,
-    STATUS_OPTIONS,
 )
 
 
@@ -161,7 +160,6 @@ class EntryEditor(QWidget):
         self.protocol_ref = QLineEdit()
         self.name = QLineEdit()
         self.description = QLineEdit()
-        self.status = self._combo(STATUS_OPTIONS)
         self.access = self._combo(ACCESS_OPTIONS)
         self.kind = self._combo(KIND_OPTIONS)
         self.kind_description = QLabel()
@@ -243,7 +241,6 @@ class EntryEditor(QWidget):
         form.addRow("协议编号", self.protocol_ref)
         form.addRow("内部名称", self.name)
         form.addRow("显示名称", self.description)
-        form.addRow("状态", self.status)
         form.addRow("访问权限", self.access)
         form.addRow("实现类型", self.kind)
         return form
@@ -401,7 +398,6 @@ class EntryEditor(QWidget):
             (self.description, "description", "编辑显示名称"),
         ):
             widget.editingFinished.connect(lambda w=widget, k=key, l=label: self._set(k, w.text(), l))
-        self.status.currentIndexChanged.connect(lambda: self._set_combo("status", self.status, "编辑状态"))
         self.access.currentIndexChanged.connect(lambda: self._set_combo("access", self.access, "编辑访问权限"))
         self.kind.currentIndexChanged.connect(self._kind_changed)
 
@@ -841,7 +837,6 @@ class EntryEditor(QWidget):
             self.protocol_ref.setText(str(self.entry.get("protocol_ref", "")))
             self.name.setText(str(self.entry.get("name", "")))
             self.description.setText(str(self.entry.get("description", "")))
-            self._select_code(self.status, self.entry.get("status", ""))
             self._select_code(self.access, self.entry.get("access", ""))
             self._select_code(self.kind, self.entry.get("kind", ""))
             self.kind_description.setText(KIND_DESCRIPTIONS.get(str(self.entry.get("kind", "")), "未知实现类型。"))

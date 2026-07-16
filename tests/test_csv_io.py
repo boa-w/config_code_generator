@@ -22,12 +22,15 @@ def test_csv_round_trip_preserves_logical_entries_and_nested_config(tmp_path: Pa
     csv_path = export_csv(document, tmp_path / "protocol.csv")
 
     assert csv_path.read_bytes().startswith(b"\xef\xbb\xbf")
+    assert "status" not in COLUMNS
+    assert "status" not in csv_path.read_text(encoding="utf-8-sig").splitlines()[0]
     objects = import_csv(csv_path)
     candidate = document.clone_with_objects(objects)
 
     assert len(objects) == 5
     assert sum(len(obj["entries"]) for obj in objects) == 9
     assert objects[0]["entries"][0]["read"]["source"] == "g_demoLanguage"
+    assert objects[0]["entries"][2]["enabled"] is False
     assert objects[4]["entries"][0]["fields"][0]["source"] == "g_demoYear"
     assert objects[1]["entries"][2]["write"]["hook"] == "write_indicator"
     assert objects[0]["entries"][0]["business"]["requirement_ref"] == "DEMO-REQ-001"

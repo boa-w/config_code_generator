@@ -2,13 +2,11 @@ from config_codegen.gui.i18n import (
     ACCESS_OPTIONS,
     KIND_DESCRIPTIONS,
     KIND_OPTIONS,
-    STATUS_OPTIONS,
     option_label,
 )
 
 
 def test_enum_labels_and_kind_descriptions_are_complete() -> None:
-    assert option_label(STATUS_OPTIONS, "implemented") == "已实现"
     assert option_label(ACCESS_OPTIONS, "read_write") == "读写"
     assert option_label(KIND_OPTIONS, "chunked_buffer") == "分包缓冲区"
     assert all(code in KIND_DESCRIPTIONS for code, _label in KIND_OPTIONS)

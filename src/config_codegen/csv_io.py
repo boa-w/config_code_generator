@@ -22,7 +22,6 @@ COLUMNS = (
     "name",
     "description",
     "protocol_ref",
-    "status",
     "enabled",
     "kind",
     "access",
@@ -105,7 +104,6 @@ def export_csv(document: ProtocolDocument, path: str | Path) -> Path:
                         "name": entry.get("name", ""),
                         "description": entry.get("description", ""),
                         "protocol_ref": entry.get("protocol_ref", ""),
-                        "status": entry.get("status", ""),
                         "enabled": str(bool(entry.get("enabled", True))).lower(),
                         "kind": entry.get("kind", ""),
                         "access": entry.get("access", ""),
@@ -179,7 +177,7 @@ def import_csv(path: str | Path) -> CommentedSeq:
 
             entry = CommentedMap()
             entry["subindex"] = first if first == last else CommentedMap({"from": first, "to": last})
-            for key in ("name", "description", "protocol_ref", "status"):
+            for key in ("name", "description", "protocol_ref"):
                 value = row[key].strip()
                 if value:
                     entry[key] = value

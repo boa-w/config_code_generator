@@ -12,13 +12,12 @@ from config_codegen.gui.i18n import (
     ACCESS_OPTIONS,
     KIND_DESCRIPTIONS,
     KIND_OPTIONS,
-    STATUS_OPTIONS,
     option_label,
 )
 
 
 class EntryTableModel(QAbstractTableModel):
-    HEADERS = ("启用", "协议编号", "需求编号", "SubIndex", "名称", "状态", "访问权限", "实现类型")
+    HEADERS = ("启用", "协议编号", "需求编号", "SubIndex", "名称", "访问权限", "实现类型")
     SEARCH_ROLE = Qt.UserRole + 1
 
     def __init__(self, controller: DocumentController, parent: Any = None) -> None:
@@ -67,7 +66,6 @@ class EntryTableModel(QAbstractTableModel):
                     entry.get("protocol_ref", ""),
                     entry.get("name", ""),
                     entry.get("description", ""),
-                    entry.get("status", ""),
                     entry.get("access", ""),
                     entry.get("kind", ""),
                     business.get("requirement_ref", ""),
@@ -78,7 +76,7 @@ class EntryTableModel(QAbstractTableModel):
             return Qt.Checked if enabled else Qt.Unchecked
         if role == Qt.ForegroundRole and not enabled:
             return QColor("#888888")
-        if role == Qt.ToolTipRole and index.column() == 7:
+        if role == Qt.ToolTipRole and index.column() == 6:
             return KIND_DESCRIPTIONS.get(str(entry.get("kind", "")), "未知实现类型。")
         if role not in (Qt.DisplayRole, Qt.EditRole):
             return None
@@ -88,7 +86,6 @@ class EntryTableModel(QAbstractTableModel):
             entry.get("business", {}).get("requirement_ref", ""),
             format_subindex(entry.get("subindex", "")),
             entry.get("description", entry.get("name", "")),
-            option_label(STATUS_OPTIONS, entry.get("status", "")),
             option_label(ACCESS_OPTIONS, entry.get("access", "")),
             option_label(KIND_OPTIONS, entry.get("kind", "")),
         )

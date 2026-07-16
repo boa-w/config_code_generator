@@ -92,7 +92,6 @@ objects:
         name: language
         description: "语言选项"
         protocol_ref: "DEMO-SET-01"
-        status: implemented
         enabled: true
         kind: scalar
         access: read_write
@@ -119,7 +118,6 @@ objects:
         name: brightness
         description: "亮度选项"
         protocol_ref: "DEMO-SET-02"
-        status: implemented
         enabled: true
         kind: scalar
         access: read_write
@@ -135,7 +133,6 @@ objects:
         name: reserved_option
         description: "预留选项"
         protocol_ref: "DEMO-SET-10"
-        status: planned
         enabled: false
 
   - index: 0x2100
@@ -147,7 +144,6 @@ objects:
         name: digital_inputs
         description: "数字输入状态"
         protocol_ref: "DEMO-DIAG-01"
-        status: implemented
         enabled: true
         kind: bitfield
         access: read_only
@@ -161,7 +157,6 @@ objects:
         name: sensor_value
         description: "传感器示例值"
         protocol_ref: "DEMO-DIAG-02"
-        status: implemented
         enabled: true
         kind: scalar
         access: read_only
@@ -174,7 +169,6 @@ objects:
         name: indicator_state
         description: "指示状态"
         protocol_ref: "DEMO-DIAG-03"
-        status: implemented
         enabled: true
         kind: hook
         access: read_write
@@ -190,7 +184,6 @@ objects:
         name: version_chunks
         description: "版本字符分包"
         protocol_ref: "DEMO-INFO-01-04"
-        status: implemented
         enabled: true
         kind: chunked_buffer
         access: read_only
@@ -211,7 +204,6 @@ objects:
         name: reset_demo
         description: "复位演示设备"
         protocol_ref: "DEMO-CTL-01"
-        status: implemented
         enabled: true
         kind: action
         access: write_only
@@ -230,7 +222,6 @@ objects:
         name: calendar_fields
         description: "年、月、日"
         protocol_ref: "DEMO-DATE-01-03"
-        status: implemented
         enabled: true
         kind: transaction_fields
         access: read_write

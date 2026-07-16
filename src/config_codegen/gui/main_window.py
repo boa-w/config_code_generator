@@ -177,7 +177,7 @@ class MainWindow(QMainWindow):
         self.entry_table.selectionModel().selectionChanged.connect(self._entry_selected)
 
         self.search_edit = QLineEdit()
-        self.search_edit.setPlaceholderText("搜索协议编号、需求、名称、状态或类型")
+        self.search_edit.setPlaceholderText("搜索协议编号、需求、名称或类型")
         self.search_edit.setClearButtonEnabled(True)
         self.search_edit.textChanged.connect(self._filter_entries)
         self.column_button = QToolButton()

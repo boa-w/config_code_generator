@@ -19,7 +19,7 @@ def test_entry_templates_create_complete_disabled_inventory(template: str, _labe
     )
 
     assert entry["enabled"] is False
-    assert entry["status"] == "planned"
+    assert "status" not in entry
     assert entry["protocol_ref"] == "0x2000:07"
     assert entry["kind"]
     assert entry["access"]

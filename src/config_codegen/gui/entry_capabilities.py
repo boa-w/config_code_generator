@@ -72,7 +72,6 @@ def create_entry_from_template(
         "name": name,
         "description": description,
         "protocol_ref": f"0x{index:04X}:{subindex:02X}",
-        "status": "planned",
         "enabled": False,
     }
     if template == "read_scalar":
