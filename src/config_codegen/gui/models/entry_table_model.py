@@ -19,6 +19,7 @@ from config_codegen.gui.i18n import (
 
 class EntryTableModel(QAbstractTableModel):
     HEADERS = ("启用", "协议编号", "需求编号", "SubIndex", "名称", "状态", "访问权限", "实现类型")
+    SEARCH_ROLE = Qt.UserRole + 1
 
     def __init__(self, controller: DocumentController, parent: Any = None) -> None:
         super().__init__(parent)
@@ -58,6 +59,21 @@ class EntryTableModel(QAbstractTableModel):
         if entry is None:
             return None
         enabled = bool(entry.get("enabled", True))
+        if role == self.SEARCH_ROLE:
+            business = entry.get("business", {})
+            return " ".join(
+                str(value)
+                for value in (
+                    entry.get("protocol_ref", ""),
+                    entry.get("name", ""),
+                    entry.get("description", ""),
+                    entry.get("status", ""),
+                    entry.get("access", ""),
+                    entry.get("kind", ""),
+                    business.get("requirement_ref", ""),
+                    business.get("category", ""),
+                )
+            )
         if role == Qt.CheckStateRole and index.column() == 0:
             return Qt.Checked if enabled else Qt.Unchecked
         if role == Qt.ForegroundRole and not enabled:

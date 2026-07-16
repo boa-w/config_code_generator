@@ -2,14 +2,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QModelIndex, QSettings, QTimer, Qt
-from PySide6.QtGui import QAction, QBrush, QCloseEvent, QColor, QFontDatabase
+from PySide6.QtCore import QModelIndex, QSettings, QSortFilterProxyModel, QTimer, Qt
+from PySide6.QtGui import QAction, QCloseEvent, QFontDatabase
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QApplication,
     QFileDialog,
     QHeaderView,
+    QHBoxLayout,
     QListWidget,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QPlainTextEdit,
@@ -19,8 +21,11 @@ from PySide6.QtWidgets import (
     QTabWidget,
     QTableView,
     QToolBar,
+    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
+    QVBoxLayout,
+    QWidget,
 )
 from ruamel.yaml.comments import CommentedMap
 
@@ -29,10 +34,12 @@ from config_codegen.document import ProtocolDocument, format_number
 from config_codegen.errors import ConfigError
 from config_codegen.generator import generate
 from config_codegen.gui.controller import DocumentController
+from config_codegen.gui.entry_capabilities import create_entry_from_template
 from config_codegen.gui.models.entry_table_model import EntryTableModel
 from config_codegen.gui.widgets.about_page import AboutPage
 from config_codegen.gui.widgets.basic_config_editor import BasicConfigEditor
 from config_codegen.gui.widgets.entry_editor import EntryEditor
+from config_codegen.gui.widgets.new_entry_dialog import NewEntryDialog
 from config_codegen.preview import PreviewResult, validate_and_preview
 
 
@@ -42,6 +49,7 @@ class MainWindow(QMainWindow):
         self.settings = QSettings("ConfigCodeGenerator", "ProtocolEditor")
         self.controller = DocumentController(document, self)
         self.selected_object: CommentedMap | None = None
+        self.selected_page = ""
         self._tree_refreshing = False
         self._last_preview = PreviewResult(False, (), "", "")
         self._update_shutdown = False
@@ -70,7 +78,7 @@ class MainWindow(QMainWindow):
     def _build_toolbar(self) -> None:
         toolbar = QToolBar("主工具栏", self)
         toolbar.setMovable(False)
-        toolbar.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        toolbar.setToolButtonStyle(Qt.ToolButtonIconOnly)
         self.addToolBar(toolbar)
 
         open_action = QAction(self.style().standardIcon(QStyle.SP_DialogOpenButton), "打开", self)
@@ -104,7 +112,7 @@ class MainWindow(QMainWindow):
 
         self.add_entry_action = QAction(self.style().standardIcon(QStyle.SP_FileIcon), "新增条目", self)
         self.add_entry_action.setShortcut("Insert")
-        self.add_entry_action.triggered.connect(self.add_entry)
+        self.add_entry_action.triggered.connect(lambda: self.add_entry(interactive=True))
         toolbar.addAction(self.add_entry_action)
 
         self.delete_entry_action = QAction(self.style().standardIcon(QStyle.SP_TrashIcon), "删除条目", self)
@@ -152,8 +160,13 @@ class MainWindow(QMainWindow):
         self.object_tree.itemChanged.connect(self._object_toggled)
 
         self.entry_model = EntryTableModel(self.controller, self)
+        self.entry_proxy = QSortFilterProxyModel(self)
+        self.entry_proxy.setSourceModel(self.entry_model)
+        self.entry_proxy.setFilterCaseSensitivity(Qt.CaseInsensitive)
+        self.entry_proxy.setFilterKeyColumn(-1)
+        self.entry_proxy.setFilterRole(EntryTableModel.SEARCH_ROLE)
         self.entry_table = QTableView()
-        self.entry_table.setModel(self.entry_model)
+        self.entry_table.setModel(self.entry_proxy)
         self.entry_table.setAlternatingRowColors(True)
         self.entry_table.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.entry_table.setSelectionMode(QAbstractItemView.SingleSelection)
@@ -162,6 +175,35 @@ class MainWindow(QMainWindow):
         self.entry_table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
         self.entry_table.horizontalHeader().setSectionResizeMode(4, QHeaderView.Stretch)
         self.entry_table.selectionModel().selectionChanged.connect(self._entry_selected)
+
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("搜索协议编号、需求、名称、状态或类型")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.textChanged.connect(self._filter_entries)
+        self.column_button = QToolButton()
+        self.column_button.setText("列")
+        self.column_button.setToolTip("选择表格显示列")
+        self.column_button.setPopupMode(QToolButton.InstantPopup)
+        from PySide6.QtWidgets import QMenu
+
+        column_menu = QMenu(self.column_button)
+        self.column_button.setMenu(column_menu)
+        for column, header in enumerate(EntryTableModel.HEADERS):
+            action = column_menu.addAction(header)
+            action.setCheckable(True)
+            action.setChecked(True)
+            action.toggled.connect(
+                lambda visible, col=column: self.entry_table.setColumnHidden(col, not visible)
+            )
+        table_tools = QHBoxLayout()
+        table_tools.setContentsMargins(4, 4, 4, 0)
+        table_tools.addWidget(self.search_edit, 1)
+        table_tools.addWidget(self.column_button)
+        self.entry_page = QWidget()
+        entry_page_layout = QVBoxLayout(self.entry_page)
+        entry_page_layout.setContentsMargins(0, 0, 0, 0)
+        entry_page_layout.addLayout(table_tools)
+        entry_page_layout.addWidget(self.entry_table, 1)
 
         fixed_font = QFontDatabase.systemFont(QFontDatabase.FixedFont)
         self.issue_list = QListWidget()
@@ -182,10 +224,10 @@ class MainWindow(QMainWindow):
         self.about_page.install_requested.connect(self._install_update)
         self.entry_editor = EntryEditor(self.controller)
         self.content_stack = QStackedWidget()
-        self.content_stack.addWidget(self.entry_table)
+        self.content_stack.addWidget(self.entry_page)
         self.content_stack.addWidget(self.basic_editor)
         self.content_stack.addWidget(self.about_page)
-        self.content_stack.setCurrentWidget(self.entry_table)
+        self.content_stack.setCurrentWidget(self.entry_page)
 
         middle = QSplitter(Qt.Vertical)
         middle.addWidget(self.content_stack)
@@ -209,17 +251,26 @@ class MainWindow(QMainWindow):
             selected = self.selected_object
             self.object_tree.clear()
             selected_item: QTreeWidgetItem | None = None
-            basic_item = QTreeWidgetItem(["基础配置  /  代码引用", ""])
-            basic_item.setData(0, Qt.UserRole, "__basic_config__")
-            basic_item.setIcon(0, self.style().standardIcon(QStyle.SP_FileDialogDetailedView))
-            basic_font = basic_item.font(0)
-            basic_font.setBold(True)
-            basic_item.setFont(0, basic_font)
-            basic_item.setBackground(0, QBrush(QColor("#36515A")))
-            basic_item.setForeground(0, QBrush(QColor("#FFFFFF")))
-            basic_item.setToolTip(0, "项目级代码生成配置")
-            self.object_tree.addTopLevelItem(basic_item)
-            self.object_tree.setFirstColumnSpanned(0, QModelIndex(), True)
+            settings = (
+                ("__project__", "项目设置", QStyle.SP_FileDialogDetailedView, "输出、CAN 与代码引用"),
+                ("__commands__", "命令定义", QStyle.SP_ComputerIcon, "协议命令字与载荷宽度"),
+                ("__errors__", "错误响应", QStyle.SP_MessageBoxWarning, "错误响应命令和错误码"),
+                ("__hooks__", "Hook 管理", QStyle.SP_FileDialogListView, "Hook 注册、契约和引用"),
+            )
+            for page_id, label, icon, tooltip in settings:
+                item = QTreeWidgetItem([label, ""])
+                item.setData(0, Qt.UserRole, page_id)
+                item.setIcon(0, self.style().standardIcon(icon))
+                font = item.font(0)
+                font.setBold(True)
+                item.setFont(0, font)
+                item.setToolTip(0, tooltip)
+                self.object_tree.addTopLevelItem(item)
+                self.object_tree.setFirstColumnSpanned(
+                    self.object_tree.topLevelItemCount() - 1, QModelIndex(), True
+                )
+                if self.selected_object is None and self.selected_page == page_id:
+                    selected_item = item
             for object_node in self.controller.document.objects:
                 index = format_number(object_node.get("index"), 4)
                 name = object_node.get("description", object_node.get("name", ""))
@@ -239,8 +290,10 @@ class MainWindow(QMainWindow):
             about_item.setFont(0, about_font)
             about_item.setToolTip(0, "版本和构建信息")
             self.object_tree.addTopLevelItem(about_item)
-            if selected_item is None and self.object_tree.topLevelItemCount() > 1:
-                selected_item = self.object_tree.topLevelItem(1)
+            if self.selected_object is None and self.selected_page == "__about__":
+                selected_item = about_item
+            if selected_item is None and len(self.controller.document.objects):
+                selected_item = self.object_tree.topLevelItem(len(settings))
             if selected_item is not None:
                 self.object_tree.setCurrentItem(selected_item)
         finally:
@@ -249,11 +302,19 @@ class MainWindow(QMainWindow):
     def _object_selected(self) -> None:
         items = self.object_tree.selectedItems()
         selected = items[0].data(0, Qt.UserRole) if items else None
-        if selected == "__basic_config__":
+        page_sections = {
+            "__project__": "project",
+            "__commands__": "commands",
+            "__errors__": "errors",
+            "__hooks__": "hooks",
+        }
+        if isinstance(selected, str) and selected in page_sections:
             self.selected_object = None
+            self.selected_page = str(selected)
             self.entry_model.set_object(None)
             self.entry_editor.set_entry(None)
             self.content_stack.setCurrentWidget(self.basic_editor)
+            self.basic_editor.show_section(page_sections[str(selected)])
             self.output_tabs.show()
             self.entry_editor.hide()
             self.add_entry_action.setEnabled(False)
@@ -261,6 +322,7 @@ class MainWindow(QMainWindow):
             return
         if selected == "__about__":
             self.selected_object = None
+            self.selected_page = "__about__"
             self.entry_model.set_object(None)
             self.entry_editor.set_entry(None)
             self.content_stack.setCurrentWidget(self.about_page)
@@ -270,7 +332,8 @@ class MainWindow(QMainWindow):
             self.delete_entry_action.setEnabled(False)
             return
         self.selected_object = selected
-        self.content_stack.setCurrentWidget(self.entry_table)
+        self.selected_page = ""
+        self.content_stack.setCurrentWidget(self.entry_page)
         self.output_tabs.show()
         self.entry_editor.show()
         self.add_entry_action.setEnabled(self.selected_object is not None)
@@ -304,12 +367,22 @@ class MainWindow(QMainWindow):
 
     def _entry_selected(self) -> None:
         rows = self.entry_table.selectionModel().selectedRows()
-        entry = self.entry_model.entry_at(rows[0].row()) if rows else None
+        source = self.entry_proxy.mapToSource(rows[0]) if rows else QModelIndex()
+        entry = self.entry_model.entry_at(source.row()) if source.isValid() else None
         self.entry_editor.set_entry(entry)
 
     def _selected_entry_row(self) -> int | None:
         rows = self.entry_table.selectionModel().selectedRows()
-        return rows[0].row() if rows else None
+        if not rows:
+            return None
+        source = self.entry_proxy.mapToSource(rows[0])
+        return source.row() if source.isValid() else None
+
+    def _filter_entries(self, text: str) -> None:
+        if hasattr(self, "entry_proxy"):
+            self.entry_proxy.setFilterFixedString(text.strip())
+            if self.entry_proxy.rowCount():
+                self.entry_table.selectRow(0)
 
     def _next_subindex(self) -> int:
         if self.selected_object is None:
@@ -326,7 +399,26 @@ class MainWindow(QMainWindow):
                 return candidate
         return 0
 
-    def add_entry(self) -> None:
+    def _default_write_command(self) -> str:
+        commands = self.controller.document.data.get("protocol", {}).get("commands", {})
+        writable = [name for name in commands if name != "read"]
+        if "write_u16" in writable:
+            return "write_u16"
+        return writable[0] if writable else "write_u16"
+
+    def _subindex_occupied(self, candidate: int) -> bool:
+        if self.selected_object is None:
+            return False
+        for entry in self.controller.document.entries(self.selected_object):
+            value = entry.get("subindex")
+            if isinstance(value, dict):
+                if int(value.get("from", 0)) <= candidate <= int(value.get("to", -1)):
+                    return True
+            elif value == candidate:
+                return True
+        return False
+
+    def add_entry(self, interactive: bool = False) -> None:
         if self.selected_object is None:
             QMessageBox.information(self, "无法新增", "请先选择一个 Index 对象。")
             return
@@ -335,21 +427,32 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "无法新增", "当前 Index 已没有可用 SubIndex。")
             return
         index = int(self.selected_object.get("index", 0))
-        entry = CommentedMap(
-            {
-                "subindex": subindex,
-                "name": f"new_entry_{subindex:02x}",
-                "description": "新协议条目",
-                "protocol_ref": f"0x{index:04X}:{subindex:02X}",
-                "status": "planned",
-                "enabled": False,
-            }
+        template = "read_write_scalar"
+        name = f"new_entry_{subindex:02x}"
+        description = "新协议条目"
+        if interactive:
+            dialog = NewEntryDialog(subindex, self)
+            if dialog.exec() != NewEntryDialog.Accepted:
+                return
+            template, subindex, name, description = dialog.values()
+            if self._subindex_occupied(subindex):
+                QMessageBox.warning(self, "无法新增", f"SubIndex {subindex} 已被当前 Index 使用。")
+                return
+        entry = create_entry_from_template(
+            template,
+            index=index,
+            subindex=subindex,
+            name=name,
+            description=description,
+            write_command=self._default_write_command(),
         )
         entries = self.controller.document.entries(self.selected_object)
         row = len(entries)
         self.controller.insert_item(entries, row, entry, "新增协议条目")
-        self.entry_table.selectRow(row)
-        self.entry_table.scrollTo(self.entry_model.index(row, 0))
+        proxy_index = self.entry_proxy.mapFromSource(self.entry_model.index(row, 0))
+        if proxy_index.isValid():
+            self.entry_table.selectRow(proxy_index.row())
+            self.entry_table.scrollTo(proxy_index)
 
     def delete_entry(self) -> None:
         if self.selected_object is None:
@@ -370,8 +473,11 @@ class MainWindow(QMainWindow):
             return
         entries = self.controller.document.entries(self.selected_object)
         self.controller.remove_item(entries, row, "删除协议条目")
-        if self.entry_model.rowCount():
-            self.entry_table.selectRow(min(row, self.entry_model.rowCount() - 1))
+        if self.entry_proxy.rowCount():
+            source_row = min(row, self.entry_model.rowCount() - 1)
+            proxy_index = self.entry_proxy.mapFromSource(self.entry_model.index(source_row, 0))
+            if proxy_index.isValid():
+                self.entry_table.selectRow(proxy_index.row())
 
     def export_csv_file(self) -> None:
         suggested = self.controller.document.path.with_suffix(".csv")

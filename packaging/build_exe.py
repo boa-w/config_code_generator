@@ -154,6 +154,7 @@ def main() -> int:
     config_dir.mkdir(parents=True, exist_ok=True)
     shutil.copy2(ROOT / "config" / "protocol.example.yaml", config_dir / "protocol.example.yaml")
     shutil.copy2(ROOT / "README.md", BUNDLE_DIR / "README.md")
+    shutil.copy2(ROOT / "README.zh-CN.md", BUNDLE_DIR / "README.zh-CN.md")
 
     with zipfile.ZipFile(ZIP_PATH, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=9) as archive:
         for path in sorted(BUNDLE_DIR.rglob("*")):

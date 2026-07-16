@@ -1,5 +1,7 @@
 # Config Code Generator
 
+[English](README.md) | [简体中文](README.zh-CN.md)
+
 Generate an embeddable C `if`/`switch-case` protocol fragment from YAML. The
 public example contains fictional identifiers and values and is not based on a
 production protocol.
@@ -108,23 +110,28 @@ The project mapping also accepts `description`, `source_file`, and
 was derived. These description fields are validated, shown in the GUI, and
 preserved by CSV import/export.
 
-The entry editor has four views. `概要` manages inventory state and generation
-selection; `业务` manages requirement and source traceability; `读写实现`
-manages wire types, commands, variables, hooks, validation, persistence,
-authorization, and chunked-buffer parameters; `高级` edits the complete entry
-YAML for bit lists, transaction fields, and uncommon combinations. Advanced
-changes participate in undo/redo and are checked by the normal live validator.
+The entry inspector shows identity and inventory state first, then reveals only
+the read, write, validation, persistence, authorization, or buffer controls
+supported by the selected implementation kind and access mode. Requirement and
+source traceability stay in a collapsed section until needed. Field-level
+errors appear at the top of the inspector and mark the corresponding control.
+The `高级 YAML` dialog handles bit lists, transaction fields, and uncommon
+combinations; its changes participate in undo/redo and normal live validation.
 
-The `基础配置` node manages project source information, the generated fragment
-path, response CAN ID, transmit function, error responses, commands, Hook
-aliases, and the C references used for command, Index, SubIndex, and payload
-data. These project-level settings remain in YAML and are intentionally not
-replaced by CSV import. Commands and Hooks use editable YAML blocks so adding a
-project-specific command does not require a GUI release.
+The left navigation exposes separate `项目设置`, `命令定义`, `错误响应`, and
+`Hook 管理` pages. Together they manage project source information, generated
+fragment path, response CAN ID, transmit function, errors, commands, Hook
+aliases, and C references. These project-level settings remain in YAML and are
+intentionally not replaced by CSV import. Commands use an editable YAML block;
+Hooks use a structured registry with contracts and reference-aware rename and
+delete operations.
 
-Entries can be added or deleted from the toolbar. New entries start as
-`planned` and disabled so incomplete implementation details cannot enter the
-generated fragment. CSV export uses UTF-8 with BOM for Excel compatibility and
+Entries can be added from templates for read-only scalars, read/write scalars,
+bitfields, Hooks, actions, transaction fields, and chunked buffers. The compact
+dialog asks only for template, SubIndex, internal name, and display name. New
+entries start as `planned` and disabled so incomplete implementation details
+cannot enter the generated fragment. The inventory supports cross-field search
+and configurable visible columns. CSV export uses UTF-8 with BOM for Excel compatibility and
 keeps nested `read`, `write`, `fields`, `buffer`, `business`, and
 `implementation` values in JSON columns. Older CSV files without the two
 description columns remain importable.

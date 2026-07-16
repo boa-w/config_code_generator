@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
+    QStackedWidget,
     QVBoxLayout,
     QWidget,
 )
@@ -64,29 +65,18 @@ class BasicConfigEditor(QWidget):
         ):
             editor.setMinimumWidth(420)
 
-        heading = QLabel("基础配置")
-        heading_font = heading.font()
-        heading_font.setBold(True)
-        heading_font.setPointSize(heading_font.pointSize() + 3)
-        heading.setFont(heading_font)
-
-        content = QWidget()
-        content.setMinimumWidth(680)
-        content.setMaximumWidth(820)
-        content_layout = QVBoxLayout(content)
-        content_layout.setContentsMargins(20, 16, 20, 16)
-        content_layout.setSpacing(10)
-        content_layout.addWidget(heading)
-        content_layout.addWidget(self._section("项目与业务代码来源"))
-        content_layout.addLayout(self._form(
+        project_content = QWidget()
+        project_layout = self._page_layout(project_content, "项目设置")
+        project_layout.addWidget(self._section("项目与业务代码来源"))
+        project_layout.addLayout(self._form(
             ("项目名称", self.project_name),
             ("项目说明", self.project_description),
             ("业务源码文件", self.source_file),
             ("协议处理函数", self.source_handler),
             ("生成文件声明", self.generated_notice),
         ))
-        content_layout.addWidget(self._section("输出、响应与 C 引用"))
-        content_layout.addLayout(self._form(
+        project_layout.addWidget(self._section("输出、响应与 C 引用"))
+        project_layout.addLayout(self._form(
             ("输出片段", self.fragment_path),
             ("响应 CAN ID", self.response_can_id),
             ("发送函数", self.transmit_function),
@@ -95,26 +85,43 @@ class BasicConfigEditor(QWidget):
             ("SubIndex 引用", self.subindex_reference),
             ("数据数组引用", self.data_reference),
         ))
-        content_layout.addWidget(self._section("错误响应"))
-        content_layout.addLayout(self._form(
+        project_layout.addStretch(1)
+
+        errors_content = QWidget()
+        errors_layout = self._page_layout(errors_content, "错误响应")
+        errors_layout.addLayout(self._form(
             ("错误响应命令", self.error_command),
             ("数值越界错误码", self.value_error_code),
             ("授权失败错误码", self.key_error_code),
         ))
-        content_layout.addWidget(self._section("命令定义 YAML"))
-        content_layout.addWidget(self.commands_yaml)
-        content_layout.addWidget(self.apply_commands, 0, Qt.AlignRight)
-        content_layout.addWidget(self._section("Hook 注册表"))
-        content_layout.addWidget(self.hook_registry)
-        content_layout.addStretch(1)
+        errors_layout.addStretch(1)
 
-        scroll = QScrollArea()
-        scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QScrollArea.NoFrame)
-        scroll.setWidget(content)
+        commands_content = QWidget()
+        commands_layout = self._page_layout(commands_content, "命令定义")
+        command_note = QLabel("命令名会出现在条目的写命令选择器中。修改后立即参与校验。")
+        command_note.setWordWrap(True)
+        commands_layout.addWidget(command_note)
+        commands_layout.addWidget(self.commands_yaml)
+        commands_layout.addWidget(self.apply_commands, 0, Qt.AlignRight)
+        commands_layout.addStretch(1)
+
+        hooks_content = QWidget()
+        hooks_layout = self._page_layout(hooks_content, "Hook 管理")
+        hooks_layout.addWidget(self.hook_registry)
+        hooks_layout.addStretch(1)
+
+        self.stack = QStackedWidget()
+        self.pages = {
+            "project": self._scroll_page(project_content),
+            "commands": self._scroll_page(commands_content),
+            "errors": self._scroll_page(errors_content),
+            "hooks": self._scroll_page(hooks_content),
+        }
+        for page in self.pages.values():
+            self.stack.addWidget(page)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(scroll)
+        layout.addWidget(self.stack)
 
         self._connect_signals()
         self.controller.changed.connect(self.refresh)
@@ -127,6 +134,34 @@ class BasicConfigEditor(QWidget):
         font.setBold(True)
         label.setFont(font)
         return label
+
+    @staticmethod
+    def _page_layout(content: QWidget, title: str) -> QVBoxLayout:
+        content.setMinimumWidth(680)
+        content.setMaximumWidth(820)
+        layout = QVBoxLayout(content)
+        layout.setContentsMargins(20, 16, 20, 16)
+        layout.setSpacing(10)
+        heading = QLabel(title)
+        font = heading.font()
+        font.setBold(True)
+        font.setPointSize(font.pointSize() + 3)
+        heading.setFont(font)
+        layout.addWidget(heading)
+        return layout
+
+    @staticmethod
+    def _scroll_page(content: QWidget) -> QScrollArea:
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.NoFrame)
+        scroll.setWidget(content)
+        return scroll
+
+    def show_section(self, section: str) -> None:
+        page = self.pages.get(section)
+        if page is not None:
+            self.stack.setCurrentWidget(page)
 
     @staticmethod
     def _form(*rows: tuple[str, QWidget]) -> QFormLayout:

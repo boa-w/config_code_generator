@@ -7,18 +7,20 @@ from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QFocusEvent, QFontDatabase
 from PySide6.QtWidgets import (
     QCheckBox,
+    QButtonGroup,
     QComboBox,
+    QDialog,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
     QInputDialog,
     QLabel,
     QLineEdit,
+    QMenu,
     QMessageBox,
     QPlainTextEdit,
     QPushButton,
     QScrollArea,
-    QTabWidget,
     QToolButton,
     QVBoxLayout,
     QWidget,
@@ -28,13 +30,13 @@ from ruamel.yaml.comments import CommentedMap
 from ruamel.yaml.scalarint import HexInt
 
 from config_codegen.gui.controller import DocumentController
+from config_codegen.gui.entry_capabilities import capability_for
 from config_codegen.gui.i18n import (
     ACCESS_OPTIONS,
     KIND_DESCRIPTIONS,
     KIND_OPTIONS,
     HOOK_CONTRACT_DESCRIPTIONS,
     STATUS_OPTIONS,
-    option_label,
 )
 
 
@@ -57,6 +59,66 @@ class CommitPlainTextEdit(QPlainTextEdit):
         self.editingFinished.emit()
 
 
+class CollapsibleSection(QWidget):
+    def __init__(self, title: str, content: QWidget, expanded: bool = False) -> None:
+        super().__init__()
+        self.toggle = QToolButton()
+        self.toggle.setText(title)
+        self.toggle.setCheckable(True)
+        self.toggle.setChecked(expanded)
+        self.toggle.setToolButtonStyle(Qt.ToolButtonTextBesideIcon)
+        self.toggle.toggled.connect(self._toggle)
+        self.content = content
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.addWidget(self.toggle)
+        layout.addWidget(content)
+        self._toggle(expanded)
+
+    def _toggle(self, expanded: bool) -> None:
+        self.toggle.setArrowType(Qt.DownArrow if expanded else Qt.RightArrow)
+        self.content.setVisible(expanded)
+
+
+class CommandSelector(QToolButton):
+    commandsChanged = Signal(list)
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.setPopupMode(QToolButton.InstantPopup)
+        self.setToolButtonStyle(Qt.ToolButtonTextOnly)
+        self._menu = QMenu(self)
+        self.setMenu(self._menu)
+        self._refreshing = False
+        self.set_commands((), ())
+
+    def set_commands(self, available: Any, selected: Any) -> None:
+        selected_set = {str(item) for item in selected}
+        self._refreshing = True
+        try:
+            self._menu.clear()
+            for command in available:
+                action = self._menu.addAction(str(command))
+                action.setCheckable(True)
+                action.setChecked(str(command) in selected_set)
+                action.toggled.connect(self._changed)
+        finally:
+            self._refreshing = False
+        self._update_text()
+
+    def selected_commands(self) -> list[str]:
+        return [action.text() for action in self._menu.actions() if action.isChecked()]
+
+    def _changed(self) -> None:
+        self._update_text()
+        if not self._refreshing:
+            self.commandsChanged.emit(self.selected_commands())
+
+    def _update_text(self) -> None:
+        selected = self.selected_commands()
+        self.setText(", ".join(selected) if selected else "选择写命令...")
+
+
 class EntryEditor(QWidget):
     def __init__(self, controller: DocumentController, parent: QWidget | None = None) -> None:
         super().__init__(parent)
@@ -64,21 +126,37 @@ class EntryEditor(QWidget):
         self.entry: CommentedMap | None = None
         self._refreshing = False
         self.setMinimumWidth(390)
-
-        self.tabs = QTabWidget()
-        self.tabs.addTab(self._overview_tab(), "概要")
-        self.tabs.addTab(self._business_tab(), "业务")
-        self.tabs.addTab(self._implementation_tab(), "读写实现")
-        self.tabs.addTab(self._advanced_tab(), "高级")
+        self._create_widgets()
+        self.error_banner = QLabel()
+        self.error_banner.setObjectName("entryErrorBanner")
+        self.error_banner.setWordWrap(True)
+        self.error_banner.hide()
+        content = QWidget()
+        content_layout = QVBoxLayout(content)
+        content_layout.setContentsMargins(8, 6, 8, 8)
+        content_layout.setSpacing(8)
+        content_layout.addWidget(self.error_banner)
+        content_layout.addLayout(self._overview_form())
+        content_layout.addWidget(self.kind_description)
+        content_layout.addWidget(self.read_group)
+        content_layout.addWidget(self.write_group)
+        content_layout.addWidget(self.validation_group)
+        content_layout.addWidget(self.storage_group)
+        content_layout.addWidget(self.buffer_group)
+        content_layout.addWidget(self.complex_structure_button)
+        content_layout.addWidget(self.business_section)
+        content_layout.addWidget(self.advanced_button)
+        content_layout.addStretch(1)
+        scroll = self._scroll_widget(content)
         layout = QVBoxLayout(self)
         layout.setContentsMargins(4, 4, 4, 4)
-        layout.addWidget(self.tabs)
+        layout.addWidget(scroll)
 
         self._connect_signals()
         self.controller.changed.connect(self.refresh)
         self.set_entry(None)
 
-    def _overview_tab(self) -> QWidget:
+    def _create_widgets(self) -> None:
         self.enabled = QCheckBox("生成此条目")
         self.protocol_ref = QLineEdit()
         self.name = QLineEdit()
@@ -89,6 +167,77 @@ class EntryEditor(QWidget):
         self.kind_description = QLabel()
         self.kind_description.setObjectName("kindDescription")
         self.kind_description.setWordWrap(True)
+
+        self.read_enabled = QCheckBox("生成读取代码")
+        self.read_wire_type = self._combo(WIRE_OPTIONS)
+        self.read_source = QLineEdit()
+        self.read_hook = QComboBox()
+        self.read_hook.setEditable(True)
+        self.read_hook_add = QToolButton()
+        self.read_hook_add.setText("+")
+        self.read_hook_add.setToolTip("新增并绑定读取 Hook")
+        self.transform_kind = self._combo((("", "无"), ("divide_integer", "整数除法")))
+        self.transform_divisor = QLineEdit()
+        self.year_transform = QCheckBox("年份减去 2000")
+
+        self.write_enabled = QCheckBox("生成写入代码")
+        self.write_commands = CommandSelector()
+        self.write_target = QLineEdit()
+        self.write_hook = QComboBox()
+        self.write_hook.setEditable(True)
+        self.write_hook_add = QToolButton()
+        self.write_hook_add.setText("+")
+        self.write_hook_add.setToolTip("新增并绑定写入 Hook")
+        self.authorization_value = QLineEdit()
+        self.authorization_radix = 16
+        self.authorization_decimal = QToolButton()
+        self.authorization_decimal.setObjectName("radixButton")
+        self.authorization_decimal.setText("10")
+        self.authorization_decimal.setCheckable(True)
+        self.authorization_decimal.setToolTip("十进制显示")
+        self.authorization_hex = QToolButton()
+        self.authorization_hex.setObjectName("radixButton")
+        self.authorization_hex.setText("16")
+        self.authorization_hex.setCheckable(True)
+        self.authorization_hex.setChecked(True)
+        self.authorization_hex.setToolTip("十六进制显示")
+        self.authorization_radix_group = QButtonGroup(self)
+        self.authorization_radix_group.setExclusive(True)
+        self.authorization_radix_group.addButton(self.authorization_decimal, 10)
+        self.authorization_radix_group.addButton(self.authorization_hex, 16)
+        self.authorization_field = self._radix_field()
+        self.acknowledge_before_hook = QCheckBox("先应答，再调用 Hook")
+
+        self.validation_policy = self._combo(POLICY_OPTIONS)
+        self.validation_minimum = QLineEdit()
+        self.validation_maximum = QLineEdit()
+        self.allowed_values = QLineEdit()
+        self.allowed_values.setPlaceholderText("0, 1, 2")
+
+        self.storage_kind = self._combo(STORAGE_OPTIONS)
+        self.storage_function = QLineEdit()
+        self.storage_address = QLineEdit()
+        self.storage_addresses = QLineEdit()
+        self.storage_addresses.setPlaceholderText("0, 1")
+        self.byte_order = self._combo((("little_endian", "小端"), ("big_endian", "大端")))
+        self.after_write = QLineEdit()
+
+        self.buffer_source = QLineEdit()
+        self.buffer_length = QLineEdit()
+        self.buffer_chunk_size = QLineEdit()
+        self.buffer_first_subindex = QLineEdit()
+        self.buffer_padding = QLineEdit()
+
+        self._create_business_widgets()
+        self._create_groups()
+        self.raw_yaml = QPlainTextEdit()
+        self.raw_yaml.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
+        self.apply_yaml_button = QPushButton("应用条目 YAML")
+        self.advanced_button = QPushButton("高级 YAML...")
+        self.complex_structure_button = QPushButton("编辑位域 / 事务字段结构...")
+        self.advanced_dialog = self._advanced_dialog()
+
+    def _overview_form(self) -> QFormLayout:
         form = QFormLayout()
         form.addRow("启用", self.enabled)
         form.addRow("协议编号", self.protocol_ref)
@@ -97,10 +246,9 @@ class EntryEditor(QWidget):
         form.addRow("状态", self.status)
         form.addRow("访问权限", self.access)
         form.addRow("实现类型", self.kind)
-        form.addRow("类型说明", self.kind_description)
-        return self._scroll_form(form)
+        return form
 
-    def _business_tab(self) -> QWidget:
+    def _create_business_widgets(self) -> None:
         self.requirement_ref = QLineEdit()
         self.category = QLineEdit()
         self.unit = QLineEdit()
@@ -116,6 +264,7 @@ class EntryEditor(QWidget):
         self.module = QLineEdit()
         self.implementation_notes = CommitPlainTextEdit()
         self.implementation_notes.setMaximumHeight(90)
+        business_content = QWidget()
         form = QFormLayout()
         form.addRow("需求编号", self.requirement_ref)
         form.addRow("业务分类", self.category)
@@ -130,108 +279,76 @@ class EntryEditor(QWidget):
         form.addRow("源码符号", self.source_symbol)
         form.addRow("所属模块", self.module)
         form.addRow("实现备注", self.implementation_notes)
-        return self._scroll_form(form)
+        business_content.setLayout(form)
+        self.business_section = CollapsibleSection(
+            "业务追踪与代码来源", business_content, expanded=False
+        )
 
-    def _implementation_tab(self) -> QWidget:
-        self.read_enabled = QCheckBox("生成读取代码")
-        self.read_wire_type = self._combo(WIRE_OPTIONS)
-        self.read_source = QLineEdit()
-        self.read_hook = QComboBox()
-        self.read_hook.setEditable(True)
-        self.read_hook_add = QToolButton()
-        self.read_hook_add.setText("+")
-        self.read_hook_add.setToolTip("新增并绑定读取 Hook")
-        self.transform_kind = self._combo((("", "无"), ("divide_integer", "整数除法")))
-        self.transform_divisor = QLineEdit()
-        self.year_transform = QCheckBox("年份减去 2000")
+    def _create_groups(self) -> None:
         read_form = QFormLayout()
         read_form.addRow("启用", self.read_enabled)
         read_form.addRow("线宽类型", self.read_wire_type)
         read_form.addRow("变量来源", self.read_source)
-        read_form.addRow("读取 Hook", self._hook_field(self.read_hook, self.read_hook_add))
+        self.read_hook_field = self._hook_field(self.read_hook, self.read_hook_add)
+        read_form.addRow("读取 Hook", self.read_hook_field)
         read_form.addRow("转换", self.transform_kind)
         read_form.addRow("除数", self.transform_divisor)
         read_form.addRow("年份转换", self.year_transform)
-        read_group = QGroupBox("读取")
-        read_group.setLayout(read_form)
+        self.read_form = read_form
+        self.read_group = QGroupBox("读取")
+        self.read_group.setLayout(read_form)
 
-        self.write_enabled = QCheckBox("生成写入代码")
-        self.write_commands = QLineEdit()
-        self.write_commands.setPlaceholderText("write_u8, write_u16")
-        self.write_target = QLineEdit()
-        self.write_hook = QComboBox()
-        self.write_hook.setEditable(True)
-        self.write_hook_add = QToolButton()
-        self.write_hook_add.setText("+")
-        self.write_hook_add.setToolTip("新增并绑定写入 Hook")
-        self.validation_policy = self._combo(POLICY_OPTIONS)
-        self.validation_minimum = QLineEdit()
-        self.validation_maximum = QLineEdit()
-        self.allowed_values = QLineEdit()
-        self.allowed_values.setPlaceholderText("0, 1, 2")
-        self.storage_kind = self._combo(STORAGE_OPTIONS)
-        self.storage_function = QLineEdit()
-        self.storage_address = QLineEdit()
-        self.storage_addresses = QLineEdit()
-        self.storage_addresses.setPlaceholderText("0, 1")
-        self.byte_order = self._combo((("little_endian", "小端"), ("big_endian", "大端")))
-        self.after_write = QLineEdit()
-        self.authorization_value = QLineEdit()
-        self.acknowledge_before_hook = QCheckBox("先应答，再调用 Hook")
         write_form = QFormLayout()
         write_form.addRow("启用", self.write_enabled)
         write_form.addRow("写命令", self.write_commands)
         write_form.addRow("目标变量", self.write_target)
-        write_form.addRow("写入 Hook", self._hook_field(self.write_hook, self.write_hook_add))
-        write_form.addRow("越界策略", self.validation_policy)
-        write_form.addRow("最小值", self.validation_minimum)
-        write_form.addRow("最大值", self.validation_maximum)
-        write_form.addRow("允许值", self.allowed_values)
-        write_form.addRow("存储类型", self.storage_kind)
-        write_form.addRow("存储函数", self.storage_function)
-        write_form.addRow("存储地址", self.storage_address)
-        write_form.addRow("地址列表", self.storage_addresses)
-        write_form.addRow("字节序", self.byte_order)
-        write_form.addRow("写后函数", self.after_write)
-        write_form.addRow("授权值", self.authorization_value)
+        self.write_hook_field = self._hook_field(self.write_hook, self.write_hook_add)
+        write_form.addRow("写入 Hook", self.write_hook_field)
+        write_form.addRow("授权值", self.authorization_field)
         write_form.addRow("Hook 顺序", self.acknowledge_before_hook)
-        write_group = QGroupBox("写入、校验与持久化")
-        write_group.setLayout(write_form)
+        self.write_form = write_form
+        self.write_group = QGroupBox("写入")
+        self.write_group.setLayout(write_form)
 
-        self.buffer_source = QLineEdit()
-        self.buffer_length = QLineEdit()
-        self.buffer_chunk_size = QLineEdit()
-        self.buffer_first_subindex = QLineEdit()
-        self.buffer_padding = QLineEdit()
+        validation_form = QFormLayout()
+        validation_form.addRow("越界策略", self.validation_policy)
+        validation_form.addRow("最小值", self.validation_minimum)
+        validation_form.addRow("最大值", self.validation_maximum)
+        validation_form.addRow("允许值", self.allowed_values)
+        self.validation_group = QGroupBox("数值校验")
+        self.validation_group.setLayout(validation_form)
+
+        storage_form = QFormLayout()
+        storage_form.addRow("存储类型", self.storage_kind)
+        storage_form.addRow("存储函数", self.storage_function)
+        storage_form.addRow("存储地址", self.storage_address)
+        storage_form.addRow("地址列表", self.storage_addresses)
+        storage_form.addRow("字节序", self.byte_order)
+        storage_form.addRow("写后函数", self.after_write)
+        self.storage_group = QGroupBox("持久化与写后处理")
+        self.storage_group.setLayout(storage_form)
+
         buffer_form = QFormLayout()
         buffer_form.addRow("数组来源", self.buffer_source)
         buffer_form.addRow("总长度", self.buffer_length)
         buffer_form.addRow("分包大小", self.buffer_chunk_size)
         buffer_form.addRow("起始 SubIndex", self.buffer_first_subindex)
         buffer_form.addRow("填充值", self.buffer_padding)
-        buffer_group = QGroupBox("分包缓冲区")
-        buffer_group.setLayout(buffer_form)
+        self.buffer_group = QGroupBox("分包缓冲区")
+        self.buffer_group.setLayout(buffer_form)
 
-        content = QWidget()
-        content_layout = QVBoxLayout(content)
-        content_layout.addWidget(read_group)
-        content_layout.addWidget(write_group)
-        content_layout.addWidget(buffer_group)
-        content_layout.addStretch(1)
-        return self._scroll_widget(content)
-
-    def _advanced_tab(self) -> QWidget:
-        self.raw_yaml = QPlainTextEdit()
-        self.raw_yaml.setFont(QFontDatabase.systemFont(QFontDatabase.FixedFont))
-        self.apply_yaml_button = QPushButton("应用条目 YAML")
+    def _advanced_dialog(self) -> QDialog:
+        dialog = QDialog(self)
+        dialog.setWindowTitle("高级条目 YAML")
+        dialog.setModal(True)
+        dialog.resize(680, 620)
         note = QLabel("可编辑位域 bits、事务 fields 以及其他完整条目字段。应用后仍可撤销。")
         note.setWordWrap(True)
-        page = QWidget()
-        layout = QVBoxLayout(page)
+        layout = QVBoxLayout(dialog)
         layout.addWidget(note)
         layout.addWidget(self.raw_yaml, 1)
         layout.addWidget(self.apply_yaml_button, 0, Qt.AlignRight)
-        return page
+        return dialog
 
     @staticmethod
     def _combo(options: tuple[tuple[str, str], ...]) -> QComboBox:
@@ -258,11 +375,15 @@ class EntryEditor(QWidget):
         layout.addWidget(button)
         return field
 
-    @staticmethod
-    def _scroll_form(form: QFormLayout) -> QScrollArea:
-        content = QWidget()
-        content.setLayout(form)
-        return EntryEditor._scroll_widget(content)
+    def _radix_field(self) -> QWidget:
+        field = QWidget()
+        layout = QHBoxLayout(field)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(3)
+        layout.addWidget(self.authorization_value, 1)
+        layout.addWidget(self.authorization_decimal)
+        layout.addWidget(self.authorization_hex)
+        return field
 
     @staticmethod
     def _scroll_widget(content: QWidget) -> QScrollArea:
@@ -326,7 +447,7 @@ class EntryEditor(QWidget):
         )
 
         self.write_enabled.clicked.connect(lambda value: self._toggle_operation("write", value))
-        self.write_commands.editingFinished.connect(self._set_commands)
+        self.write_commands.commandsChanged.connect(self._set_commands)
         self.write_target.editingFinished.connect(lambda: self._set_nested_text("write", "target", self.write_target.text()))
         assert self.write_hook.lineEdit() is not None
         self.write_hook.lineEdit().editingFinished.connect(
@@ -347,6 +468,7 @@ class EntryEditor(QWidget):
         self.byte_order.currentIndexChanged.connect(lambda: self._set_deep("write", "storage", "byte_order", self.byte_order.currentData()))
         self.after_write.editingFinished.connect(lambda: self._set_deep_text("write", "after_write", "function", self.after_write.text()))
         self.authorization_value.editingFinished.connect(self._set_authorization)
+        self.authorization_radix_group.idClicked.connect(self._set_authorization_radix)
         self.acknowledge_before_hook.clicked.connect(lambda value: self._set_nested("write", "acknowledge_before_hook", value))
 
         for widget, key in (
@@ -359,10 +481,20 @@ class EntryEditor(QWidget):
             numeric = key != "source"
             widget.editingFinished.connect(lambda w=widget, k=key, n=numeric: self._set_nested_text("buffer", k, w.text(), n))
         self.apply_yaml_button.clicked.connect(self._apply_yaml)
+        self.advanced_button.clicked.connect(self._open_advanced)
+        self.complex_structure_button.clicked.connect(self._open_advanced)
 
     def set_entry(self, entry: CommentedMap | None) -> None:
         self.entry = entry
         self.refresh()
+
+    def _open_advanced(self) -> None:
+        if self.entry is None:
+            return
+        self.raw_yaml.setPlainText(self.controller.document.dump_node(self.entry))
+        self.advanced_dialog.show()
+        self.advanced_dialog.raise_()
+        self.advanced_dialog.activateWindow()
 
     def _set(self, key: str, value: object, label: str) -> None:
         if not self._refreshing and self.entry is not None:
@@ -436,8 +568,7 @@ class EntryEditor(QWidget):
     def _set_transform_divisor(self) -> None:
         self._set_deep_number("read", "transform", "divisor", self.transform_divisor.text())
 
-    def _set_commands(self) -> None:
-        values = [item.strip() for item in self.write_commands.text().split(",") if item.strip()]
+    def _set_commands(self, values: list[str]) -> None:
         self._set_nested("write", "commands", values if values else None)
 
     def _set_allowed_values(self) -> None:
@@ -450,8 +581,26 @@ class EntryEditor(QWidget):
 
     def _set_authorization(self) -> None:
         text = self.authorization_value.text().strip()
+        value: object | None = None
+        if text:
+            try:
+                if self.authorization_radix == 16:
+                    normalized = text[2:] if text.lower().startswith("0x") else text
+                    value = HexInt(int(normalized, 16))
+                else:
+                    value = int(text, 10)
+            except ValueError:
+                value = text
         self._set_deep("write", "authorization", "kind", "magic_value" if text else None)
-        self._set_deep("write", "authorization", "value", self._parse_number(text) if text else None)
+        self._set_deep("write", "authorization", "value", value)
+
+    def _set_authorization_radix(self, radix: int) -> None:
+        self.authorization_radix = radix
+        if self.entry is None:
+            return
+        write = self.entry.get("write", {})
+        value = write.get("authorization", {}).get("value") if isinstance(write, dict) else None
+        self.authorization_value.setText(self._format_authorization(value))
 
     def _prompt_create_write_hook(self) -> None:
         kind = str(self.entry.get("kind", "")) if self.entry is not None else ""
@@ -526,6 +675,7 @@ class EntryEditor(QWidget):
             QMessageBox.critical(self, "YAML 格式错误", "条目 YAML 必须是一个映射。")
             return
         self.controller.replace_mapping(self.entry, value, "编辑完整条目 YAML")
+        self.advanced_dialog.accept()
 
     @staticmethod
     def _select_code(combo: QComboBox, code: object) -> None:
@@ -542,6 +692,13 @@ class EntryEditor(QWidget):
             return ""
         if isinstance(value, int):
             return f"0x{value:X}" if isinstance(value, HexInt) else str(value)
+        return str(value)
+
+    def _format_authorization(self, value: object) -> str:
+        if not isinstance(value, int):
+            return str(value or "")
+        if self.authorization_radix == 16:
+            return f"0x{value:X}"
         return str(value)
 
     def _populate_hook_combo(self, combo: QComboBox, selected: str, expected: str) -> None:
@@ -570,11 +727,114 @@ class EntryEditor(QWidget):
         else:
             combo.setEditText(selected)
 
+    def _update_visibility(self) -> None:
+        if self.entry is None:
+            return
+        kind = str(self.entry.get("kind", ""))
+        access = str(self.entry.get("access", ""))
+        capability = capability_for(kind)
+        readable = access != "write_only"
+        writable = access != "read_only"
+        self.read_group.setVisible(readable)
+        self.write_group.setVisible(writable)
+        self.validation_group.setVisible(writable and capability.validation)
+        self.storage_group.setVisible(writable and capability.storage)
+        self.buffer_group.setVisible(capability.buffer)
+        self.complex_structure_button.setVisible(capability.complex_structure)
+
+        self.read_form.setRowVisible(self.read_source, capability.read_source)
+        self.read_form.setRowVisible(self.read_hook_field, capability.read_hook)
+        self.read_form.setRowVisible(self.transform_kind, capability.read_transform)
+        self.read_form.setRowVisible(
+            self.transform_divisor,
+            capability.read_transform and self.transform_kind.currentData() == "divide_integer",
+        )
+        self.read_form.setRowVisible(self.year_transform, kind == "transaction_fields")
+        self.write_form.setRowVisible(self.write_target, capability.write_target)
+        self.write_form.setRowVisible(self.write_hook_field, capability.write_hook)
+        self.write_form.setRowVisible(self.authorization_field, capability.authorization)
+        self.write_form.setRowVisible(
+            self.acknowledge_before_hook, capability.write_hook
+        )
+
+        storage_kind = str(self.storage_kind.currentData() or "")
+        storage_form = self.storage_group.layout()
+        assert isinstance(storage_form, QFormLayout)
+        storage_form.setRowVisible(self.storage_function, bool(storage_kind))
+        storage_form.setRowVisible(self.storage_address, storage_kind == "eeprom_u8")
+        storage_form.setRowVisible(self.storage_addresses, storage_kind == "eeprom_bytes")
+        storage_form.setRowVisible(self.byte_order, storage_kind == "eeprom_bytes")
+
+    def _update_inline_errors(self) -> None:
+        widgets = (
+            self.name,
+            self.kind,
+            self.access,
+            self.read_enabled,
+            self.read_source,
+            self.read_hook,
+            self.write_enabled,
+            self.write_commands,
+            self.write_target,
+            self.write_hook,
+            self.buffer_source,
+        )
+        for widget in widgets:
+            widget.setStyleSheet("")
+            widget.setToolTip("")
+        if self.entry is None or not bool(self.entry.get("enabled", True)):
+            self.error_banner.hide()
+            return
+        kind = str(self.entry.get("kind", ""))
+        access = str(self.entry.get("access", ""))
+        capability = capability_for(kind)
+        errors: list[tuple[QWidget, str]] = []
+        if not _IDENTIFIER.fullmatch(str(self.entry.get("name", ""))):
+            errors.append((self.name, "内部名称不是有效的 C 标识符"))
+        if not kind:
+            errors.append((self.kind, "请选择实现类型"))
+        if not access:
+            errors.append((self.access, "请选择访问权限"))
+        read = self.entry.get("read")
+        if access != "write_only":
+            if not isinstance(read, dict):
+                errors.append((self.read_enabled, "缺少读取配置"))
+            elif read.get("enabled", True):
+                if capability.read_source and not read.get("source"):
+                    errors.append((self.read_source, "读取变量不能为空"))
+                if capability.read_hook and not read.get("hook"):
+                    errors.append((self.read_hook, "请选择读取 Hook"))
+        write = self.entry.get("write")
+        if access != "read_only":
+            if not isinstance(write, dict):
+                errors.append((self.write_enabled, "缺少写入配置"))
+            elif write.get("enabled", True):
+                if not write.get("commands"):
+                    errors.append((self.write_commands, "至少选择一个写命令"))
+                if capability.write_target and not write.get("target"):
+                    errors.append((self.write_target, "目标变量不能为空"))
+                if capability.write_hook and not write.get("hook"):
+                    errors.append((self.write_hook, "请选择写入 Hook"))
+        if capability.buffer:
+            buffer = self.entry.get("buffer")
+            if not isinstance(buffer, dict) or not buffer.get("source"):
+                errors.append((self.buffer_source, "缓冲区来源不能为空"))
+        if errors:
+            for widget, message in errors:
+                widget.setStyleSheet("border: 1px solid #B13A32;")
+                widget.setToolTip(message)
+            self.error_banner.setText(
+                f"{len(errors)} 个字段需要处理：" + "；".join(message for _, message in errors[:3])
+            )
+            self.error_banner.show()
+        else:
+            self.error_banner.hide()
+
     def refresh(self) -> None:
         self._refreshing = True
         try:
             available = self.entry is not None
-            self.tabs.setEnabled(available)
+            self.setEnabled(available)
             if not available:
                 self.raw_yaml.clear()
                 return
@@ -620,7 +880,12 @@ class EntryEditor(QWidget):
             self.year_transform.setChecked(read.get("year_transform") == "subtract_2000")
 
             self.write_enabled.setChecked(isinstance(write_node, dict) and bool(write.get("enabled", True)))
-            self.write_commands.setText(", ".join(str(item) for item in write.get("commands", [])))
+            available_commands = [
+                name
+                for name in self.controller.document.data.get("protocol", {}).get("commands", {})
+                if name != "read"
+            ]
+            self.write_commands.set_commands(available_commands, write.get("commands", []))
             self.write_target.setText(str(write.get("target", "")))
             expected_write_contract = (
                 "transaction" if self.entry.get("kind") == "transaction_fields"
@@ -642,7 +907,9 @@ class EntryEditor(QWidget):
             self.storage_addresses.setText(", ".join(self._text(item) for item in storage.get("addresses", [])))
             self._select_code(self.byte_order, storage.get("byte_order", "little_endian"))
             self.after_write.setText(str(write.get("after_write", {}).get("function", "")))
-            self.authorization_value.setText(self._text(write.get("authorization", {}).get("value")))
+            self.authorization_value.setText(
+                self._format_authorization(write.get("authorization", {}).get("value"))
+            )
             self.acknowledge_before_hook.setChecked(bool(write.get("acknowledge_before_hook", False)))
 
             buffer = self.entry.get("buffer", {})
@@ -652,5 +919,7 @@ class EntryEditor(QWidget):
             self.buffer_first_subindex.setText(self._text(buffer.get("first_subindex")))
             self.buffer_padding.setText(self._text(buffer.get("padding")))
             self.raw_yaml.setPlainText(self.controller.document.dump_node(self.entry))
+            self._update_visibility()
+            self._update_inline_errors()
         finally:
             self._refreshing = False

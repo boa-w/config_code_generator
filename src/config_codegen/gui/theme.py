@@ -48,6 +48,17 @@ def apply_theme(application: QApplication) -> None:
         QToolButton:pressed {
             background-color: #CBDADD;
         }
+        QToolButton#radixButton {
+            background-color: #E4E9EB;
+            color: #334147;
+            border: 1px solid #AAB8BD;
+            padding: 4px 7px;
+        }
+        QToolButton#radixButton:checked {
+            background-color: #28717A;
+            color: #FFFFFF;
+            border-color: #205E66;
+        }
         QToolButton:disabled {
             color: #899398;
         }
@@ -150,6 +161,12 @@ def apply_theme(application: QApplication) -> None:
             color: #1F6670;
             font-size: 16px;
             font-weight: 600;
+        }
+        QLabel#entryErrorBanner {
+            background-color: #F5DDDA;
+            color: #70241F;
+            border-left: 3px solid #B13A32;
+            padding: 6px 8px;
         }
         QPushButton {
             background-color: #D7E3E5;

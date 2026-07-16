@@ -17,6 +17,7 @@ SAMPLE = ROOT / "config" / "protocol.example.yaml"
 
 def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, monkeypatch) -> None:
     apply_theme(qapp)
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args, **kwargs: QMessageBox.Discard)
     assert qapp.palette().color(QPalette.Text) != qapp.palette().color(QPalette.Base)
     path = tmp_path / "config" / "protocol.yaml"
     path.parent.mkdir()
@@ -25,7 +26,7 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     qtbot.addWidget(window)
     window.show()
 
-    assert window.object_tree.topLevelItemCount() == 7
+    assert window.object_tree.topLevelItemCount() == 10
     assert window.entry_model.rowCount() == 3
     assert window._last_preview.valid
 
@@ -33,6 +34,9 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     assert window.content_stack.currentWidget() is window.basic_editor
     assert window.entry_editor.isHidden()
     assert not window.add_entry_action.isEnabled()
+    window.object_tree.setCurrentItem(window.object_tree.topLevelItem(3))
+    assert window.basic_editor.stack.currentWidget() is window.basic_editor.pages["hooks"]
+    window.basic_config_action.trigger()
     window.basic_editor.transmit_function.setText("Custom_Send")
     window.basic_editor.transmit_function.editingFinished.emit()
     assert window.controller.document.data["protocol"]["response"]["transmit_function"] == "Custom_Send"
@@ -65,7 +69,7 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     window.about_page.copy_version_info()
     assert window.about_page.version_info.version in qapp.clipboard().text()
 
-    window.object_tree.setCurrentItem(window.object_tree.topLevelItem(1))
+    window.object_tree.setCurrentItem(window.object_tree.topLevelItem(4))
 
     assert window.entry_model.data(window.entry_model.index(0, 5)) == "已实现"
     assert window.entry_model.data(window.entry_model.index(0, 6)) == "读写"
@@ -77,6 +81,23 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     assert window.entry_editor.kind.currentText() == "标量"
     assert window.entry_editor.kind.currentData() == "scalar"
     assert "单个变量" in window.entry_editor.kind_description.text()
+    assert window.entry_editor.validation_group.isVisible()
+    assert not window.entry_editor.buffer_group.isVisible()
+    assert not window.entry_editor.business_section.content.isVisible()
+    assert window.entry_editor.error_banner.isHidden()
+    window.entry_editor.read_source.clear()
+    window.entry_editor.read_source.editingFinished.emit()
+    assert window.entry_editor.error_banner.isVisible()
+    assert "读取变量不能为空" in window.entry_editor.error_banner.text()
+    window.controller.undo_stack.undo()
+    assert window.entry_editor.error_banner.isHidden()
+    write_u8_action = next(
+        action for action in window.entry_editor.write_commands.menu().actions()
+        if action.text() == "write_u8"
+    )
+    write_u8_action.setChecked(True)
+    assert "write_u8" in window.controller.document.objects[0]["entries"][0]["write"]["commands"]
+    window.controller.undo_stack.undo()
     assert window.entry_editor.requirement_ref.text() == "DEMO-REQ-001"
     window.entry_editor.owner.setText("display-team")
     window.entry_editor.owner.editingFinished.emit()
@@ -97,6 +118,7 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     assert window.controller.document.objects[0]["entries"][0]["description"] == original_description
 
     window.entry_editor.set_entry(indicator_entry)
+    assert not window.entry_editor.validation_group.isVisible()
     assert window.entry_editor.read_hook.findData("read_indicator") >= 0
     assert window.entry_editor.read_hook.findData("write_indicator") < 0
     assert window.entry_editor.write_hook.findData("write_indicator") >= 0
@@ -107,7 +129,25 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     assert window.controller.document.data["hooks"]["created_read_hook"]["contract"] == "read"
     window.controller.undo_stack.undo()
     assert indicator_entry["read"]["hook"] == "read_indicator"
+
+    action_entry = window.controller.document.objects[3]["entries"][0]
+    window.entry_editor.set_entry(action_entry)
+    assert window.entry_editor.authorization_field.isVisible()
+    assert window.entry_editor.authorization_value.text() == "0xA5A55A5A"
+    window.entry_editor.authorization_decimal.click()
+    assert window.entry_editor.authorization_value.text() == str(0xA5A55A5A)
+    window.entry_editor.authorization_value.setText("123456")
+    window.entry_editor.authorization_value.editingFinished.emit()
+    assert action_entry["write"]["authorization"]["value"] == 123456
+    window.controller.undo_stack.undo()
+    window.entry_editor.authorization_hex.click()
+    assert window.entry_editor.authorization_value.text() == "0xA5A55A5A"
     window.entry_editor.set_entry(window.controller.document.objects[0]["entries"][0])
+
+    window.search_edit.setText("brightness")
+    assert window.entry_proxy.rowCount() == 1
+    window.search_edit.clear()
+    assert window.entry_proxy.rowCount() == 3
 
     verified_index = window.entry_editor.status.findData("verified")
     window.entry_editor.status.setCurrentIndex(verified_index)
@@ -127,6 +167,9 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
     added = window.controller.document.objects[0]["entries"][-1]
     assert added["status"] == "planned"
     assert added["enabled"] is False
+    assert added["kind"] == "scalar"
+    assert added["access"] == "read_write"
+    assert added["read"]["source"] == "TODO_value"
 
     monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.Yes)
     window.delete_entry()
@@ -134,3 +177,4 @@ def test_main_window_edits_adds_and_deletes_entry(qapp, qtbot, tmp_path: Path, m
 
     window.controller.undo_stack.undo()
     assert window.entry_model.rowCount() == 4
+    window.controller.mark_clean()
