@@ -51,6 +51,7 @@ class GeneratedHook:
     call: str
     return_policy: str
     unused_arguments: tuple[str, ...]
+    body: str | None
 
 
 def _wire_width(node: dict[str, Any], path: str) -> int:
@@ -335,13 +336,14 @@ def _generated_hook(implementation: HookImplementation) -> GeneratedHook:
         return_type=return_type,
         parameters=parameters,
         description=implementation.description or implementation.alias,
-        call=f"{implementation.call_function}({arguments})",
+        call=f"{implementation.call_function}({arguments})" if implementation.call_function else "",
         return_policy=implementation.return_policy,
         unused_arguments=tuple(
             argument
             for argument in contract_arguments
             if argument not in implementation.arguments
         ),
+        body=implementation.body,
     )
 
 

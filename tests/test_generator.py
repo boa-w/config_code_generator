@@ -146,3 +146,42 @@ def test_generated_hook_rejects_invalid_arguments_and_missing_output(tmp_path: P
     config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
     with pytest.raises(ConfigError, match="hook_implementations"):
         load_config(config_path)
+
+
+def test_generated_hook_supports_custom_c_body(tmp_path: Path) -> None:
+    document = yaml.safe_load(SAMPLE.read_text(encoding="utf-8"))
+    document["hooks"]["read_indicator"]["generate"] = {
+        "enabled": True,
+        "body": "uint32_t result = 3u;\nreturn result;",
+    }
+    config_path = tmp_path / "custom-hook-body.yaml"
+    config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+
+    _fragment, hook_path = generate_outputs(config_path, tmp_path)
+
+    assert hook_path is not None
+    hooks = hook_path.read_text(encoding="utf-8")
+    assert "    uint32_t result = 3u;\n    return result;" in hooks
+    assert "Demo_ReadIndicatorState" not in hooks
+
+
+@pytest.mark.parametrize(
+    "generate, message",
+    [
+        ({"enabled": True, "body": "   "}, "non-empty string"),
+        (
+            {"enabled": True, "body": "return 0u;", "call_function": "Demo_Read"},
+            "cannot be combined",
+        ),
+    ],
+)
+def test_generated_hook_rejects_invalid_custom_body(
+    tmp_path: Path, generate: dict[str, object], message: str
+) -> None:
+    document = yaml.safe_load(SAMPLE.read_text(encoding="utf-8"))
+    document["hooks"]["read_indicator"]["generate"] = generate
+    config_path = tmp_path / "invalid-custom-hook-body.yaml"
+    config_path.write_text(yaml.safe_dump(document, allow_unicode=True), encoding="utf-8")
+
+    with pytest.raises(ConfigError, match=message):
+        load_config(config_path)

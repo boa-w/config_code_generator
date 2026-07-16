@@ -141,7 +141,7 @@ inventory, and can be reverted with one undo operation.
 The switch `.inc` fragment is written to `generator.output.fragment`. Scalar
 reads and writes are emitted directly. Complex behavior is dispatched to Hooks.
 Hooks remain handwritten by default; Hooks with an enabled `generate` mapping
-are emitted as wrapper definitions to `generator.output.hook_implementations`.
+are emitted as definitions to `generator.output.hook_implementations`.
 The generator still does not emit headers, parsers, or runtime helpers.
 
 Use `enabled` at object, entry, read, or write level to control generated code.
@@ -194,6 +194,26 @@ can forward all parameters, a supported subset, or no parameters. The
 target as `void` and returns `true`, which is useful for existing void actions.
 Read Hooks must use `forward`.
 
+For behavior that cannot be represented by a thin wrapper, `body` contains the
+complete C function body without the surrounding signature or braces:
+
+```yaml
+hooks:
+  read_hardware_flags:
+    function: Product_ReadHardwareFlags
+    contract: read
+    description: "Return the product hardware feature mask."
+    generate:
+      enabled: true
+      body: |
+        return 0x00000003u;
+```
+
+`body` is mutually exclusive with `call_function`, `arguments`, and
+`return_policy`. The body can use parameters exposed by the selected contract.
+Protocol ACK and error responses remain owned by the generated switch handler;
+the body implements only the Hook result and business side effects.
+
 The generated Hook fragment contains function definitions but no includes or
 target declarations. Include it after the target functions are declared and
 before the generated switch fragment. The surrounding project remains
@@ -207,9 +227,9 @@ Renames update every entry reference. Deleting a referenced Hook clears and
 disables those operations so invalid calls are not generated.
 The entry editor filters Hook choices by contract and can create and bind a new
 Hook directly from the read or write field. The Hook management page also
-controls wrapper generation, target function, forwarded arguments, and return
-policy. Generated wrappers are shown in the `Hook 实现` preview tab and are
-written together with the switch fragment.
+controls wrapper generation, custom C bodies, target functions, forwarded
+arguments, and return policy. Generated implementations are shown in the
+`Hook 实现` preview tab and are written together with the switch fragment.
 
 When `acknowledge_before_hook` is enabled, the generated handler sends the ACK
 first and intentionally ignores the hook return value. This is intended for

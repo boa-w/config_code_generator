@@ -102,9 +102,10 @@ class HookImplementation:
     function: str
     contract: str
     description: str
-    call_function: str
+    call_function: str | None
     arguments: tuple[str, ...]
     return_policy: str
+    body: str | None
 
 
 @dataclass(frozen=True)
@@ -295,47 +296,63 @@ def load_config(path: str | Path) -> GeneratorConfig:
                 "call_function",
                 "arguments",
                 "return_policy",
+                "body",
             }
             if unknown:
                 raise ConfigError(
                     f"hooks.{name}.generate: unsupported fields {', '.join(sorted(unknown))}"
                 )
             if bool(generate_node.get("enabled", True)):
-                call_function = require_identifier(
-                    generate_node.get("call_function"),
-                    f"hooks.{name}.generate.call_function",
-                )
-                if call_function == function:
-                    raise ConfigError(
-                        f"hooks.{name}.generate.call_function: must not call the wrapper itself"
-                    )
                 allowed_arguments = {
                     "read": (),
                     "write": ("value",),
                     "transaction": ("subindex", "value"),
                     "chunk_write": ("subindex", "payload"),
                 }[contract]
-                raw_arguments = generate_node.get("arguments", list(allowed_arguments))
-                if not isinstance(raw_arguments, list) or not all(
-                    isinstance(argument, str) for argument in raw_arguments
-                ):
-                    raise ConfigError(f"hooks.{name}.generate.arguments: expected string list")
-                arguments = tuple(raw_arguments)
-                if len(set(arguments)) != len(arguments) or any(
-                    argument not in allowed_arguments for argument in arguments
-                ):
-                    raise ConfigError(
-                        f"hooks.{name}.generate.arguments: incompatible with {contract!r} contract"
+                body_node = generate_node.get("body")
+                if body_node is not None:
+                    if not isinstance(body_node, str) or not body_node.strip():
+                        raise ConfigError(f"hooks.{name}.generate.body: expected non-empty string")
+                    mixed = set(generate_node) & {"call_function", "arguments", "return_policy"}
+                    if mixed:
+                        raise ConfigError(
+                            f"hooks.{name}.generate.body: cannot be combined with {', '.join(sorted(mixed))}"
+                        )
+                    call_function = None
+                    arguments = ()
+                    return_policy = "forward"
+                    body = body_node.strip()
+                else:
+                    call_function = require_identifier(
+                        generate_node.get("call_function"),
+                        f"hooks.{name}.generate.call_function",
                     )
-                return_policy = str(generate_node.get("return_policy", "forward"))
-                if return_policy not in {"forward", "always_success"}:
-                    raise ConfigError(
-                        f"hooks.{name}.generate.return_policy: expected forward or always_success"
-                    )
-                if contract == "read" and return_policy != "forward":
-                    raise ConfigError(
-                        f"hooks.{name}.generate.return_policy: read Hook must forward its result"
-                    )
+                    if call_function == function:
+                        raise ConfigError(
+                            f"hooks.{name}.generate.call_function: must not call the wrapper itself"
+                        )
+                    raw_arguments = generate_node.get("arguments", list(allowed_arguments))
+                    if not isinstance(raw_arguments, list) or not all(
+                        isinstance(argument, str) for argument in raw_arguments
+                    ):
+                        raise ConfigError(f"hooks.{name}.generate.arguments: expected string list")
+                    arguments = tuple(raw_arguments)
+                    if len(set(arguments)) != len(arguments) or any(
+                        argument not in allowed_arguments for argument in arguments
+                    ):
+                        raise ConfigError(
+                            f"hooks.{name}.generate.arguments: incompatible with {contract!r} contract"
+                        )
+                    return_policy = str(generate_node.get("return_policy", "forward"))
+                    if return_policy not in {"forward", "always_success"}:
+                        raise ConfigError(
+                            f"hooks.{name}.generate.return_policy: expected forward or always_success"
+                        )
+                    if contract == "read" and return_policy != "forward":
+                        raise ConfigError(
+                            f"hooks.{name}.generate.return_policy: read Hook must forward its result"
+                        )
+                    body = None
                 hook_implementations[name] = HookImplementation(
                     alias=name,
                     function=hook_functions[name],
@@ -344,6 +361,7 @@ def load_config(path: str | Path) -> GeneratorConfig:
                     call_function=call_function,
                     arguments=arguments,
                     return_policy=return_policy,
+                    body=body,
                 )
 
     if hook_implementations and hook_fragment_path is None:

@@ -138,6 +138,22 @@ hooks:
 
 读取 Hook 必须使用 `forward`。GUI 的 Hook 管理页可以配置是否生成、实际调用函数、参数传递和返回策略，并在修改后实时预览生成代码。
 
+无法通过薄包装表达的业务逻辑可以使用 `body`，内容只填写函数大括号内的完整 C 代码：
+
+```yaml
+hooks:
+  read_hardware_flags:
+    function: Product_ReadHardwareFlags
+    contract: read
+    description: "读取硬件能力标志。"
+    generate:
+      enabled: true
+      body: |
+        return 0x00000003u;
+```
+
+`body` 不能与 `call_function`、`arguments` 或 `return_policy` 同时使用，可以直接引用当前 Hook 契约提供的参数。协议 ACK 和错误响应仍由生成的 switch 处理，函数体只负责返回值和业务副作用。GUI 可在“包装调用业务函数”和“自定义 C 函数体”之间切换。
+
 Hook 实现片段只生成函数定义，不生成 `#include` 或目标函数声明。目标项目应先声明实际业务函数，再包含 Hook 实现片段，最后包含 switch-case 片段。所有 `call_function` 仍由目标项目实现或链接。
 
 当 `acknowledge_before_hook` 开启时，生成代码会先发送 ACK，再调用 Hook，并有意忽略 Hook 返回值。这适用于复位等可能不会返回的操作。

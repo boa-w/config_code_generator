@@ -1,9 +1,12 @@
 // {{ config.raw.project.generated_notice }}
-// Generated Hook wrappers. Include this fragment before the switch fragment.
+// Generated Hook implementations. Include this fragment before the switch fragment.
 {% for hook in hooks %}
 // {{ hook.description }}
 {{ hook.return_type }} {{ hook.function }}({{ hook.parameters }})
 {
+{% if hook.body is not none %}
+{{ hook.body | indent(4, true) }}
+{% else %}
 {% for argument in hook.unused_arguments %}
     (void){{ argument }};
 {% endfor %}
@@ -12,6 +15,7 @@
 {% else %}
     (void){{ hook.call }};
     return true;
+{% endif %}
 {% endif %}
 }
 {% endfor %}
