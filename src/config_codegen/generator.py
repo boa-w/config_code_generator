@@ -319,9 +319,9 @@ def _build_cases(config: GeneratorConfig) -> tuple[CommandCase, ...]:
 def _generated_hook(implementation: HookImplementation) -> GeneratedHook:
     signatures = {
         "read": ("uint32_t", "void"),
-        "write": ("bool", "uint32_t value"),
-        "transaction": ("bool", "uint8_t subindex, uint32_t value"),
-        "chunk_write": ("bool", "uint8_t subindex, const uint8_t payload[4]"),
+        "write": ("uint8_t", "uint32_t value"),
+        "transaction": ("uint8_t", "uint8_t subindex, uint32_t value"),
+        "chunk_write": ("uint8_t", "uint8_t subindex, const uint8_t payload[4]"),
     }
     return_type, parameters = signatures[implementation.contract]
     contract_arguments = {

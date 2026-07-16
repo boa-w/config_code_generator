@@ -14,7 +14,7 @@
     return {{ hook.call }};
 {% else %}
     (void){{ hook.call }};
-    return true;
+    return 1u;
 {% endif %}
 {% endif %}
 }

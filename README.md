@@ -154,9 +154,9 @@ function, application variables, storage functions, and hook implementations.
 Hook contracts used by generated call sites are:
 
 - Read hook: `uint32_t Hook(void)`
-- Write/action hook: `bool Hook(uint32_t value)`
-- Transaction hook: `bool Hook(uint8_t subindex, uint32_t value)`
-- Chunk write hook: `bool Hook(uint8_t subindex, const uint8_t payload[4])`
+- Write/action hook: `uint8_t Hook(uint32_t value)`
+- Transaction hook: `uint8_t Hook(uint8_t subindex, uint32_t value)`
+- Chunk write hook: `uint8_t Hook(uint8_t subindex, const uint8_t payload[4])`
 
 Every Hook uses a structured definition with an explicit call contract:
 
@@ -191,7 +191,7 @@ hooks:
 `arguments` may contain only parameters exposed by the selected contract. It
 can forward all parameters, a supported subset, or no parameters. The
 `forward` policy returns the target function result; `always_success` calls the
-target as `void` and returns `true`, which is useful for existing void actions.
+target as `void` and returns `1u`, which is useful for existing void actions.
 Read Hooks must use `forward`.
 
 For behavior that cannot be represented by a thin wrapper, `body` contains the

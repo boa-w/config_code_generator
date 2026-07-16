@@ -47,11 +47,11 @@ def test_generates_nested_switches_and_hooks(tmp_path: Path) -> None:
     assert reset_case.index(ack) < reset_case.index(reset)
     assert "uint32_t Demo_Hook_ReadIndicator(void)" in hooks
     assert "return Demo_ReadIndicatorState();" in hooks
-    assert "bool Demo_Hook_WriteIndicator(uint32_t value)" in hooks
+    assert "uint8_t Demo_Hook_WriteIndicator(uint32_t value)" in hooks
     assert "return Demo_ApplyIndicatorState(value);" in hooks
     assert "(void)Demo_ResetDevice();" in hooks
     assert "(void)value;" in hooks
-    assert "return true;" in hooks
+    assert "return 1u;" in hooks
     assert "#include" not in hooks
 
 

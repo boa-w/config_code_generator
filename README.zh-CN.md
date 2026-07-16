@@ -103,9 +103,9 @@ hooks:
 支持的契约和调用签名：
 
 - `read`：`uint32_t Hook(void)`；
-- `write`：`bool Hook(uint32_t value)`；
-- `transaction`：`bool Hook(uint8_t subindex, uint32_t value)`；
-- `chunk_write`：`bool Hook(uint8_t subindex, const uint8_t payload[4])`。
+- `write`：`uint8_t Hook(uint32_t value)`；
+- `transaction`：`uint8_t Hook(uint8_t subindex, uint32_t value)`；
+- `chunk_write`：`uint8_t Hook(uint8_t subindex, const uint8_t payload[4])`。
 
 字符串形式的 Hook 和未指定类型的契约会被拒绝。校验器也会拒绝契约与调用位置不匹配的 Hook。GUI 支持新增、重命名、删除、说明和修改契约；重命名会同步所有条目引用，删除被引用的 Hook 会清除引用并停用相关操作。条目检查器会按契约过滤候选 Hook，也可以在读取或写入字段旁直接创建并绑定。
 
@@ -134,7 +134,7 @@ hooks:
 `call_function` 是包装函数实际调用的业务函数。`arguments` 只能选择当前契约提供的参数，可以传递全部参数、受支持的部分参数或不传参数。返回策略包括：
 
 - `forward`：直接返回业务函数结果；
-- `always_success`：以 `void` 方式调用业务函数，然后固定返回 `true`。
+- `always_success`：以 `void` 方式调用业务函数，然后固定返回 `1u`。
 
 读取 Hook 必须使用 `forward`。GUI 的 Hook 管理页可以配置是否生成、实际调用函数、参数传递和返回策略，并在修改后实时预览生成代码。
 

@@ -37,9 +37,9 @@ HOOK_CONTRACT_OPTIONS = (
 
 HOOK_CONTRACT_DESCRIPTIONS = {
     "read": "uint32_t Hook(void)",
-    "write": "bool Hook(uint32_t value)",
-    "transaction": "bool Hook(uint8_t subindex, uint32_t value)",
-    "chunk_write": "bool Hook(uint8_t subindex, const uint8_t payload[4])",
+    "write": "uint8_t Hook(uint32_t value)",
+    "transaction": "uint8_t Hook(uint8_t subindex, uint32_t value)",
+    "chunk_write": "uint8_t Hook(uint8_t subindex, const uint8_t payload[4])",
 }
 
 
